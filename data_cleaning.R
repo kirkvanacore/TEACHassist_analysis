@@ -84,13 +84,16 @@ head(tal)
 
 tal$tutoring_observed_adjusted <- ifelse(tal$randomized_with_control == 1, 0, tal$tutoring_observed)
 
-
-
-
+# number of uses and freq of use
 length(unique(tal$user_id))
 describe(data.frame(table(tal$user_id))$Freq)
 # median 6; highly positively skewed
 
+# variable for sequential exposures
+tal2<-tal %>%
+  group_by(user_id) %>%
+  arrange(timestamp, .by_group =T) %>%
+  mutate(num_exposures = seq(n()))
 
 ## Read Meta Data ####
 

@@ -1,0 +1,110 @@
+---
+title: "TEACHassists Analysis 1"
+author: "Kirk Vanacore"
+date: "10/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup, include=FALSE}
+####Installing & Loading Packages###
+#create list of packages
+packages = c(
+  "psych",
+  "lme4",
+  "nlme",
+  "ggplot2",
+  "RColorBrewer",
+  "dplyr",
+  "ggExtra",
+  "hexbin"
+)
+#load install
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+#clear objects
+rm(packages, package.check)
+```
+
+``` {r, include = FALSE}
+#read analysis data
+ad <- read.csv("analysis_data_1.csv")
+colnames(ad)
+
+# data for the frsi encounter with 
+ad_1st <- 
+
+```
+
+
+# Levels of Randimization
+1. students are randomized into treatment and control
+  * treatment --> access to the TEACHassist Hints
+  * control --> no access to hint (access to explianitions ?)
+
+# Research Questions
+1. 
+
+
+# Assumptions
+```{r, assumptions}
+
+table(ad$randomized_between_tutor_strategies, ad$randomized_with_control)
+
+```
+
+
+# models
+```{r, assumptions}
+
+# Treatment effect on the treated
+m1 <- glmer(
+  next_problem_correctness ~
+    randomized_between_tutor_strategies +
+  (1|user_id)
+  ,
+  data = ad[ad$assigned_tutor_strategy_id != 0, ],
+  family = binomial
+)
+summary(m1)
+
+# interaction between treatment and student prior accuracy
+m2 <- glmer(
+  next_problem_correctness ~
+    randomized_between_tutor_strategies*prior_accuracy +
+  (1|user_id)
+  ,
+  data = ad[ad$assigned_tutor_strategy_id != 0, ],
+  family = binomial
+)
+summary(m2)
+
+# interaction between treatment and student prior accuracy
+m2 <- glmer(
+  next_problem_correctness ~
+    randomized_between_tutor_strategies*prior_accuracy +
+  (1|user_id)
+  ,
+  data = ad[ad$assigned_tutor_strategy_id != 0 & ad$prior_num_problems > 10, ],
+  family = binomial
+)
+summary(m2)
+
+
+
+```
+
+
+
+

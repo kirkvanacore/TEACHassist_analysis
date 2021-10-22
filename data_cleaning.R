@@ -70,9 +70,8 @@ head(tal)
         # Is is only students who completed a problem? (what does that mean to complete a problem?)
         # why is the avg problems lower than the avg assignments? aren't assignments nested within problems
         # why are there way more students in this data file than the assignments set
-        # When students 
 
-
+# READOCDE HINTS OBSERVED
 # some students are in the control and observed a hint 
   # checked with Ethan 
   #-> this just means they got the answer after all attempts
@@ -81,8 +80,15 @@ head(tal)
 # this raises the question whether some students have a hint flag because they
 # got the answer just like those in the control
 # !!!
-
 tal$tutoring_observed_adjusted <- ifelse(tal$randomized_with_control == 1, 0, tal$tutoring_observed)
+
+# is randomization at the student or encounter (student/problem) level
+table(tal$randomized_between_tutor_strategies)
+
+table(tal$user_id, tal$randomized_between_tutor_strategies)
+
+# next problem correness
+table(is.na(tal$next_problem_correctness))
 
 # number of uses and freq of use
 length(unique(tal$user_id))
@@ -90,10 +96,12 @@ describe(data.frame(table(tal$user_id))$Freq)
 # median 6; highly positively skewed
 
 # variable for sequential exposures
-tal2<-tal %>%
+tal<-tal %>%
   group_by(user_id) %>%
   arrange(timestamp, .by_group =T) %>%
   mutate(num_exposures = seq(n()))
+
+check<- data.frame(table(tal[tal$num_exposures == 1, ]$user_id))
 
 ## Read Meta Data ####
 
@@ -105,6 +113,9 @@ colnames(pf)
         # problem type (1-17)
         # Level (k-8, hsa, hsf, hsg, hsm, hsn, hss)
         # subject
+    # Why are their duplicated tutor_strategy_ids (5658 dups)
+table(duplicated(pf$problem_id)) # No Dups yeah!!!
+
 
 
 ##### TEACHassits (Tutor) Features #####
@@ -113,6 +124,21 @@ colnames(taf)
 # QUESTIONS:
     # Explanation -> is the a worked problem with the answer?
     # what does the hint flag mean? What are the Tutors that are not hints? --> Hints and expolaintions are mutually exclusiove
+
+length(unique(taf$tutor_strategy_id)) # some duplicated ids!!
+table(duplicated(taf$tutor_strategy_id))
+table(duplicated(taf$tutor_strategy_id))/length(taf$tutor_strategy_id)
+
+taf$dup <- duplicated(taf$tutor_strategy_id)
+
+
+
+
+
+### !!! temporarily remove duplicates #######
+taf <- taf %>% 
+  filter(dup == F) %>%
+  select(-dup)
 
 length(unique(taf$content_creator_id)) # 19 content creators
 table(taf$content_creator_id)
@@ -150,7 +176,7 @@ table(taf$font_use)
 table(taf$text_size_use)
 
 
-## Aggregate student performance data ####
+# Aggregate student performance data ####
 # student performance prior to any TEACHassist problems
 
 ### !! I AM ASSUMING THAT timestamp AND problem_start_time are in the same formate and are sequenental variables
@@ -199,11 +225,53 @@ prior_performance <- prior_performance %>%
         # CHECK WITH ETHAN ->this can because the students either didn't have any prior data 
         # or b/c their problem data had NA for accuracy (see questions in TEACHassist Logs section above)
 
-### ALL STUDENTS HAD SOME FORM OF PRIOR PERFORMANCE?? -> does this seem right?
+#!! ALL STUDENTS HAD SOME FORM OF PRIOR PERFORMANCE?? -> does this seem right?
+# Aggregated problem difficulty ####
+#(avg accuracy on problem across students)
+length(unique(prl$problem_id))
+
+# exclude rows with NA for problem_first_attempt_correct
+prl2 <- prl %>%
+  filter(is.na(problem_first_attempt_correct) == F)
+
+# avg accuracy
+problem_difficulity <- aggregate(prl2$problem_first_attempt_correct, by = list(prl2$problem_id), FUN = mean)
+colnames(problem_difficulity) <- c("problem_id", "problem_avg_accuracy")
+table(is.na(problem_difficulity$problem_avg_accuracy))
+
+# number of data points to calc accuracy
+prior_num_problem <- data.frame(table(prl2$problem_id))
+colnames(prior_num_problem) <- c("problem_id", "num_student_data_to_calc_accuray")
+colnames(prior_num_problem)
+describe(prior_num_problem$num_student_data_to_calc_accuray)
+hist(prior_num_problem$num_student_data_to_calc_accuray, breaks = 100000, xlim= c(0,100))
+prior_num_problem$problem_id <- as.integer(as.character(prior_num_problem$problem_id))
+
+
+# standard error of accuracy
+std <- function(x) sd(x)/sqrt(length(x))
+problem_difficulity_SE <- aggregate(prl2$problem_first_attempt_correct, by = list(prl2$problem_id), FUN = std)
+colnames(problem_difficulity_SE) <- c("problem_id", "problem_accuracy_se")
+problem_difficulity_SE$user_id <- as.integer(as.character(problem_difficulity_SE$user_id))
+
+
+# 
+problem_difficulity <- problem_difficulity %>%
+  left_join(problem_difficulity_SE,
+            by = "problem_id") %>%
+  left_join(prior_num_problem,
+            by = "problem_id")
+
+
+table(is.na(problem_difficulity$problem_avg_accuracy))
+describe(problem_difficulity$problem_avg_accuracy)
+describe(problem_difficulity$problem_accuracy_se)
+hist(problem_difficulity$problem_accuracy_se)
+plot(problem_difficulity$num_student_data_to_calc_accuray, problem_difficulity$problem_accuracy_se, ylim = c(0,500))
 
 # ASK ADAM -> if i ran a rasch model on these data would I be able to develop metrics of student performance relative to problem difficulty
   
-## Merge for Analysis Data Sets #####
+# Merge for Analysis Data Sets #####
 
 ad <- tal %>%
   left_join(
@@ -211,13 +279,45 @@ ad <- tal %>%
     by = c("assigned_tutor_strategy_id"="tutor_strategy_id")
   ) %>%
   left_join(prior_performance,
-            by = c("user_id"))
-    
-  length(unique(ad$user_id))
+            by = c("user_id")) %>%
+  left_join(pf_performance %>%
+              select("problem_id",
+                     "average_correctness",
+                    "normalized_average_correctness"), ### originally used my own calculations for problem diff measures, but had alot of missing data
+            by = c("problem_id"))
   
-colnames(ad)
+    
+  length(unique(ad$user_id)) # far fewere when 
+  
+  table(is.na(ad$average_correctness)) # we have missing avg accuracy data
+  
+  table(is.na(ad$problem_avg_accuracy)) # we have missing avg accuracy data
+  
+  
+  table(is.na(ad$prior_accuracy)) # we have a lot of missing avg accuracy data
+  
+# #### !! CHANGES 
+#   # missing meta data exportation
+#   table(ad[is.na(ad$problem_avg_accuracy) == T,]$problem_id)
+#     # It seems that a lot of these are problems where students have NA for their first attempt
+#     # is also seems like there are no next problems in the TEACHassist log data
+#   check <- ad[is.na(ad$problem_avg_accuracy) == T, c("assignment_id","problem_id")] %>%
+#     distinct()
+#   colnames(check)
+# 
+#   # Pull in performance data form other data file
+#   pf_performance <- read.csv("problem_features.csv")
+#   table(is.na(pf_performance$average_correctness))
+# 
+#   colnames(pf_performance)
+# 
+#   # !! WILL NEED TO STANDARDIZE HOW I GET PERFORMANCE DATA !!
+#   # add data from pf_performance
+  
+  
 
 # save data 
 write.csv(ad, "analysis_data_1.csv")
 
+rm(list=setdiff(ls(), "ad")) # X will remain
 

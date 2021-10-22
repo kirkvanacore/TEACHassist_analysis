@@ -42,20 +42,46 @@ rm(packages, package.check)
 ad <- read.csv("analysis_data_1.csv")
 colnames(ad)
 
-# data for the frsi encounter with 
-ad_1st <- 
+# data for the first encounter with TEACHassist
+ad_1st <- ad %>% 
+  filter(num_exposures == 1)
+length(unique(ad_1st$user_id))
+table(ad_1st$num_exposures)
+
+# data for the first 10 encounters with TEACHassist
+ad_10exposures <- ad %>% 
+  filter(num_exposures <= 10)
+length(unique(ad_10exposures$user_id))
+table(ad_10exposures$num_exposures)
 
 ```
 
+# The Experiment 
 
-# Levels of Randimization
-1. students are randomized into treatment and control
+## Levels of Randimization
+1. Encounter Level Randomization: Students are randomized into treatment and control for each problem
   * treatment --> access to the TEACHassist Hints
-  * control --> no access to hint (access to explianitions ?)
+  * control --> no access to hint (with access to explanations)
+  * During the experiment students can be randomized into different conditions for different problems
+2. When there is more than one hint for the problem, students could have been randomized between multiple different hints
 
-# Research Questions
-1. 
+# Research Questions (first exposure)
 
+## Orginal Research questions
+1. **Total Effect of Treatment on Intent to Treat:** What are the effects of TEACHassist accounting for problem difficulty and prior student performance?
+2. **Interaction between Treatment and Student Ability:** Does the effect of hints differ based upon students' previous performance? 
+3. **Interaction between Treatment and Problem Difficulty:** Does the effect of hints differ based upon the difficulty of the problems they are attempting?
+
+
+## Other research questions
+4. Effect of Treatment on Treated
+5. Longitudinal effects of treatment -> effects accross mutiple exposures
+6. TEACHassist feature effects: Does TEACHassist effect vary based upon spe
+
+# Method
+Multilevel Modeling
+* Random intercepts were included for the problems 
+* For Cross classified: Students can be nested within mutiple encounters and use multiple problems and problems can have different sets of students
 
 # Assumptions
 ```{r, assumptions}
@@ -65,46 +91,161 @@ table(ad$randomized_between_tutor_strategies, ad$randomized_with_control)
 ```
 
 
-# models
+# Preliminary Results
+
+## Q1: Total Effect of Treatement on Intent to Treat 
 ```{r, assumptions}
 
 # Treatment effect on the treated
-m1 <- glmer(
+m1.1 <- glmer(
   next_problem_correctness ~
     randomized_between_tutor_strategies +
-  (1|user_id)
-  ,
-  data = ad[ad$assigned_tutor_strategy_id != 0, ],
+  (1|problem_id) +
+  (1|assigned_tutor_strategy_id) #im not sure whether this is okay, but it should be because,
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
   family = binomial
 )
-summary(m1)
+summary(m1.1)
 
-# interaction between treatment and student prior accuracy
-m2 <- glmer(
+# add student level prior accuracy
+m1.2 <- glmer(
   next_problem_correctness ~
-    randomized_between_tutor_strategies*prior_accuracy +
-  (1|user_id)
+    randomized_between_tutor_strategies +
+    prior_accuracy + 
+  (1|problem_id )+
+  (1|assigned_tutor_strategy_id)
   ,
-  data = ad[ad$assigned_tutor_strategy_id != 0, ],
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
   family = binomial
 )
-summary(m2)
+summary(m1.2)
 
-# interaction between treatment and student prior accuracy
-m2 <- glmer(
+# Treatment effect on the treated
+m1.3 <- glmer(
   next_problem_correctness ~
-    randomized_between_tutor_strategies*prior_accuracy +
-  (1|user_id)
+    randomized_between_tutor_strategies +
+        prior_accuracy + 
+        average_correctness +
+  (1|problem_id)+
+  (1|assigned_tutor_strategy_id)
   ,
-  data = ad[ad$assigned_tutor_strategy_id != 0 & ad$prior_num_problems > 10, ],
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
   family = binomial
 )
-summary(m2)
-
+summary(m1.3)
 
 
 ```
 
+## Q2: Interaction between Treatement & Student Ability
+```{r}
+m2 <- glmer(
+  next_problem_correctness ~
+    randomized_between_tutor_strategies*prior_accuracy +
+        prior_accuracy + 
+        average_correctness  +
+  (1|problem_id)+
+  (1|assigned_tutor_strategy_id),
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
+  family = binomial
+)
+summary(m2)
+```
+
+ 
+## Q3: Interaction between Treatment and Problem Difficulty
+```{r}
+m3 <- glmer(
+  next_problem_correctness ~
+    randomized_between_tutor_strategies*average_correctness +
+        prior_accuracy + 
+        average_correctness  +
+  (1|problem_id) +
+  (1|assigned_tutor_strategy_id)
+  ,
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
+  family = binomial
+)
+summary(m2)
+```
+
+## Q4: Effect of Treatment on Treated
+```{r}
+m4.1 <- glmer(
+  next_problem_correctness ~
+    tutoring_observed_adjusted +
+  (1|problem_id) +
+  (1|assigned_tutor_strategy_id)
+  ,
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
+  family = binomial
+)
+summary(m4.1)
+
+m4.2 <- glmer(
+  next_problem_correctness ~
+    tutoring_observed_adjusted*prior_accuracy +
+        prior_accuracy + 
+        average_correctness  +
+  (1|problem_id)+
+  (1|assigned_tutor_strategy_id),
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
+  family = binomial
+)
+summary(m4.2)
 
 
+m4.3 <- glmer(
+  next_problem_correctness ~
+    tutoring_observed_adjusted*average_correctness +
+        prior_accuracy + 
+        average_correctness  +
+  (1|problem_id)+
+  (1|assigned_tutor_strategy_id),
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
+  family = binomial
+)
+summary(m4.3)
+```
+## Q5: Logitudinal Effects: Effects accorss mutiple expsures
+```{r}
 
+
+m4.1 <- glmer(
+  next_problem_correctness ~
+    tutoring_observed_adjusted +
+    num_exposures +
+  (1|user_id) +
+  (1|problem_id) +
+  (1|assigned_tutor_strategy_id)
+  ,
+  data = ad_10exposures[ad_1st$prior_num_problems >= 5,],
+  family = binomial
+)
+summary(m4.1)
+
+m4.2 <- glmer(
+  next_problem_correctness ~
+    tutoring_observed_adjusted*prior_accuracy +
+        prior_accuracy + 
+        average_correctness  +
+  (1|problem_id)+
+  (1|assigned_tutor_strategy_id),
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
+  family = binomial
+)
+summary(m4.2)
+
+
+m4.3 <- glmer(
+  next_problem_correctness ~
+    tutoring_observed_adjusted*average_correctness +
+        prior_accuracy + 
+        average_correctness  +
+  (1|problem_id)+
+  (1|assigned_tutor_strategy_id),
+  data = ad_1st[ad_1st$prior_num_problems >= 5,],
+  family = binomial
+)
+summary(m4.3)
+```

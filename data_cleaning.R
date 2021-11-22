@@ -132,9 +132,6 @@ table(duplicated(taf$tutor_strategy_id))/length(taf$tutor_strategy_id)
 taf$dup <- duplicated(taf$tutor_strategy_id)
 
 
-
-
-
 ### !!! temporarily remove duplicates #######
 taf <- taf %>% 
   filter(dup == F) %>%
@@ -226,6 +223,7 @@ prior_performance <- prior_performance %>%
         # or b/c their problem data had NA for accuracy (see questions in TEACHassist Logs section above)
 
 #!! ALL STUDENTS HAD SOME FORM OF PRIOR PERFORMANCE?? -> does this seem right?
+
 # Aggregated problem difficulty ####
 #(avg accuracy on problem across students)
 length(unique(prl$problem_id))

@@ -1,0 +1,307 @@
+---
+title: "TEACHERassists Analysis 1"
+author: "Kirk Vanacore"
+date: "10/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+####Installing & Loading Packages###
+library(psych)
+library(lme4)
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(ggExtra)
+library(hexbin)
+library(sjPlot)
+```
+
+# Rational
+* replication of previous work on TEACHERassist
+* further exploration into how work
+
+# Research Questions 
+
+## Orginal Research questions (first exposure)
+1. **Total Effect of Treatment on Intent to Treat:** What are the effects of TEACHassist accounting for problem difficulty and prior student performance?
+2. **Interaction between Treatment and Student Ability:** Does the effect of hints differ based upon students' previous performance? 
+3. **Interaction between Treatment and Problem Difficulty:** Does the effect of hints differ based upon the difficulty of the problems they are attempting?
+
+
+# The Experiment 
+ 
+
+# Sample
+``` {r, include = FALSE}
+# read Treatment Control analysis data
+tc_data <- read.csv("/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/analysis_data_ad_randomized_with_control.csv")
+colnames(tc_data)
+
+## Pull 20% of data for analysis
+set.seed(2)
+user_ids <- tc_data %>%
+  ungroup() %>%
+  filter(num_exposures == 1) %>%
+  select(user_id) %>%
+  sample_frac(size= .1,
+                     replace = FALSE)
+
+tc_data_test <-  tc_data %>%
+  inner_join(user_ids,
+              by = "user_id") %>%
+#  filter(hint == 1 | is.na(hint)) %>%
+   ungroup()
+
+table(tc_data_test$hint)
+table(is.na(tc_data_test$hint))
+
+# save data set
+write.csv(tc_data_test, "/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/tc_testing_data_set_allexposers.csv")
+
+tc_data_test <- read.csv(tc_data_test, "/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/tc_testing_data_set_allexposers.csv")
+
+```
+
+
+# Method
+Multilevel Modeling
+* Random intercepts were included for the problems 
+* For Cross classified: Students can be nested within multiple encounters and use multiple problems and problems can have different sets of students
+
+# Assumptions
+## Frequencies
+```{r}
+# treatment/control
+table(tc_data$treatment)/length(tc_data$treatment)
+table(tc_data_test$treatment)/length(tc_data_test$treatment)
+```
+
+## Descriptives
+```{r}
+## Next problem correctness
+
+# test sample
+describe(tc_data_test$next_problem_correctness_adjusted)
+describeBy(tc_data_test$next_problem_correctness_adjusted, tc_data_test$treatment)
+t.test(tc_data_test$next_problem_correctness_adjusted ~ tc_data_test$treatment) # simple test --> no difference between treatment and control
+
+# full sample
+describe(tc_data$next_problem_correctness_adjusted)
+describeBy(tc_data$next_problem_correctness_adjusted, tc_data$treatment)
+t.test(tc_data$next_problem_correctness_adjusted ~ tc_data$treatment) # simple test --> no difference between treatment and control
+
+
+## Next problem correctness 2
+tc_data_test$next_problem_correctness_adjusted2 <- ifelse(is.na(tc_data_test$next_problem_correctness) == T 
+                                                          & is.na(tc_data_test$next_problem_id) == F, 0,
+                                                tc_data_test$next_problem_correctness)
+# test sample
+describe(tc_data_test$next_problem_correctness_adjusted)
+describeBy(tc_data_test$next_problem_correctness_adjusted, tc_data_test$treatment)
+t.test(tc_data_test$next_problem_correctness_adjusted2 ~ tc_data_test$treatment) # simple test --> no difference between treatment and control
+
+tc_data$next_problem_correctness_adjusted2 <- ifelse(is.na(tc_data$next_problem_correctness) == T & is.na(tc_data$next_problem_id) == F, 0,
+                                                tc_data$next_problem_correctness)
+
+table(is.na(tc_data$next_problem_correctness_adjusted2 ))/length(tc_data$next_problem_correctness_adjusted2)
+
+# full sample
+describe(tc_data$next_problem_correctness_adjusted2)
+describeBy(tc_data$next_problem_correctness_adjusted, tc_data$treatment)
+t.test(tc_data$next_problem_correctness_adjusted2 ~ tc_data$treatment) # simple test --> no difference between treatment and control
+
+
+table(is.na(tc_data_test$next_problem_correctness_adjusted))
+table(tc_data_test$next_problem_correctness_adjusted)
+describeBy(tc_data_test$next_problem_correctness_adjusted, tc_data_test$treatment)
+t.test(tc_data$next_problem_correctness ~ tc_data$treatment) # simple test --> no difference between treatment and control
+t.test(tc_data$next_problem_correctness ~ tc_data$treatment) # simple test --> no difference between treatment and control
+
+## Prior accuracy
+describe(tc_data_test$prior_accuracy)
+describeBy(tc_data_test$prior_accuracy, tc_data_test$treatment)
+t.test(tc_data_test$prior_accuracy ~ tc_data_test$treatment) #  not statistically sig
+
+# mean center prior accuracy
+mean(tc_data_test$prior_accuracy, na.rm = T)
+tc_data_test$prior_accuracy_mc <- tc_data_test$prior_accuracy - mean(tc_data_test$prior_accuracy, na.rm = T) 
+describe(tc_data_test$prior_accuracy_mc)
+
+ggplot(data = tc_data_test, aes(x= prior_accuracy, group = as.factor(treatment), fill = as.factor(treatment))) +
+  geom_density(alpha = .6) +
+  theme_minimal()
+
+
+## Problem Difficulty
+describe(tc_data_test$problem_difficulity_est)
+
+ggplot(data = tc_data_test %>%
+         select(problem_id, problem_difficulity_est) %>%
+         distinct()
+         , aes(x= problem_difficulity_est)) +
+  geom_density(fill = "gray") +
+  theme_minimal()
+
+# mean center problem_difficulity_est
+mean(tc_data_test$problem_difficulity_est, na.rm = T)
+tc_data_test$problem_difficulity_est_mc <- tc_data_test$problem_difficulity_est - mean(tc_data_test$problem_difficulity_est, na.rm = T) 
+describe(tc_data_test$problem_difficulity_est_mc)
+
+# Colinearity 
+cor.test(tc_data_test$problem_difficulity_est, 
+         tc_data_test$prior_accuracy)
+# small sig positive correlation
+```
+
+# Models
+
+# Test Models
+
+## Q1: Total Effect of Treatement on Intent to Treat 
+
+
+$$log(\hat{y})\sim\gamma_{0i}+\gamma_1Treatment_{1i}+\gamma_2PriorAccuracy_{2i}+\gamma_3ProblemDifficulty_{3i}+e_i$$
+$$\gamma_0 = \beta_{00} +\beta_{00} + \mu_{0i} $$
+
+
+```{r, warning=FALSE}
+# null model
+m1.Null <- glmer(
+  next_problem_correctness_adjusted ~
+  (1|problem_id) +
+  (1|user_id),
+  data = tc_data_test,
+  family = binomial
+)
+summary(m1.Null)
+
+tc_data_test$hint_adj <- ifelse(is.na(tc_data_test$hint), 0, tc_data_test$hint)
+tc_data_test$explanation_adj <- ifelse(is.na(tc_data_test$explanation), 0, tc_data_test$explanation)
+table(tc_data_test$explanation_adj, tc_data_test$explanation)
+m1.1 <- glmer(
+  next_problem_correctness_adjusted ~
+        treatment +
+        num_exposures + # this is the number of previous problems complete 
+  (1+ treatment|problem_id)+
+  (1|user_id), 
+  data = tc_data_test,
+  family = binomial)
+summary(m1.1)
+
+table(tc_data_test$explanation_adj)
+m1.2 <- glmer(
+  next_problem_correctness_adjusted ~
+        treatment*explanation_adj +
+        num_exposures + # this is the number of previous problems complete 
+        explanation_adj +
+  (1+ treatment|problem_id)+
+  (1|user_id), 
+  data = tc_data_test,
+  family = binomial)
+summary(m1.2)
+
+# add student level prior accuracy
+m1.3 <- glmer(
+  next_problem_correctness_adjusted ~
+    treatment +
+    prior_accuracy_mc + 
+    num_exposures +
+    explanation_adj +
+  (1|problem_id )+
+  (1|user_id)
+  ,
+  data = tc_data_test,
+  family = binomial
+)
+summary(m1.3)
+
+# Treatment effect on the treated
+m1.4 <- glmer(
+  next_problem_correctness_adjusted ~
+    treatment +
+    prior_accuracy_mc + 
+    problem_difficulity_est_mc +
+    num_exposures +
+    explanation_adj +
+  (1 + treatment|problem_id)+
+  (1|user_id)
+  ,
+  data = tc_data_test,
+  family = binomial
+)
+summary(m1.4)
+
+# Treatment effect on the treated
+m1.5 <- glmer(
+  next_problem_correctness_adjusted ~
+    treatment +
+    prior_accuracy_mc + 
+    problem_difficulity_est_mc +
+    num_exposures +
+    explanation_adj +
+  (1 |problem_id)+
+  (1 + treatment|user_id)
+  ,
+  data = tc_data_test,
+  family = binomial
+)
+summary(m1.5)
+
+  # Minimal reduction in deviance
+tab_model(m1.Null,
+          m1.1,
+          m1.2,
+          m1.3,
+          m1.4,
+            collapse.ci = T,
+  show.aic = T)
+```
+
+
+## Q2: Interaction between Treatement & Student Ability
+```{r}
+m2 <- glmer(
+  next_problem_correctness_adjusted ~
+    treatment*prior_accuracy_mc +
+        prior_accuracy_mc + 
+        problem_difficulity_est +
+    num_exposures + # this is the number of previous problems complete 
+    (1|user_id) +
+  (1|problem_id),
+  data = tc_data_test,
+  family = binomial
+)
+summary(m2)
+tab_model(
+          m2,
+            collapse.ci = T,
+  show.aic = T)
+```
+ 
+## Q3: Interaction between Treatment and Problem Difficulty
+```{r}
+m3 <- glmer(
+  next_problem_correctness_adjusted ~
+    treatment*problem_difficulity_est_mc +
+        prior_accuracy_mc + 
+        problem_difficulity_est_mc  +
+    num_exposures + # this is the number of previous problems complete 
+        explanation_adj +
+  (1|problem_id) +
+  (1|user_id)
+  ,
+  data = tc_data_test,
+  family = binomial
+)
+summary(m3)
+tab_model(m3,
+            collapse.ci = T,
+  show.aic = T)
+```
+

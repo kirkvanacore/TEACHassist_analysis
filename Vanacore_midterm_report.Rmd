@@ -1,0 +1,384 @@
+---
+title: "Midterm Report"
+author: "Kirk Vanacore"
+date: "10/28/2021"
+output:  html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+####Installing & Loading Packages###
+library(psych)
+library(lme4)
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(ggExtra)
+library(hexbin)
+library(sjPlot)
+
+
+```
+
+# Purpose/Rational
+* Replication of previous work on TEACHassist
+* Exploration into when TEACHassists works and for whom TEACHassists works 
+
+The purpose of this analysis use the TEACHassist experimental data to understand the circumstances during which students benefit from hints. Although previous research has established that students with access to TEACHasssist outperform their peers on average, more research on the existing data sets will provide better information about the benefits of this feature (Patikorn & Heffernan, 2020; Prihar et al., 2021). First, the previous research did not use statistical techniques common to educational research that allow for the estimation of effect sizes after accounting for the multi-level structures of the data. In this case, student responses are nested within groups of problems and hints. Neither of the previous studies evaluating the TEACHassist feature accounted for this nesting when estimating the feature’s effects. Modeling the variance in the outcome associated with different problems and hints will provide more accurate estimates of the effects of TEACHassist (Gillman & Hill, 2018). Second, since the presumed goal of TEACHassist is to give immediate support to students who need assistance, investigating whether the effect of using TEACHassist differs based on the student's previous performance and problem difficulty will help clarify whether the feature meets this goal. Put differently, this analysis will show whether lower-performing students benefit more than high performers and whether the benefit is stronger for more difficult problems than for easier ones.
+
+# Research Questions 
+
+## Orginal Research questions 
+1. **Total Effect of Treatment on Intent to Treat:** What are the effects of TEACHassist accounting for problem difficulty and prior student performance?
+2. **Interaction between Treatment and Student Ability:** Does the effect of hints differ based upon students' previous performance? 
+3. **Interaction between Treatment and Problem Difficulty:** Does the effect of hints differ based upon the difficulty of the problems they are attempting?
+
+## Other research questions
+4. Effect of Treatment on Treated
+5. TEACHassist feature effects: Does TEACHassist effect vary based upon hint attributes?
+6. Longitudinal effects of treatment -> effects across multiple exposures?
+
+# The Experiment 
+
+The TEACHassist experiments test the impact of crowd-sourced teacher generated hints on student performance within ASSISTments.
+
+## Levels of Randimization
+1. Encounter Level Randomization: Students are randomized into treatment and control for each problem
+  * treatment --> access to the TEACHassist Hints
+  * control --> no access to hint (with access to explanations)
+  * During the experiment students can be randomized into different conditions for different problems
+2. When there is more than one hint for the problem, students could have been randomized between multiple different hints
+
+# Method
+## Sample/Data 
+* Need more context about this particular data set. 
+* Is this inclusive of previous experiments?
+
+``` {r}
+#read analysis data
+ad <- read.csv("./TEACHassist_data2/analysis_data_2.csv")
+
+# ## data for the first encounter with TEACHassist
+# ad_1st <- ad %>% 
+#   filter(num_exposures == 1 & 
+#            prior_num_problems >= 5,
+#          num_student_data_to_calc_accuray >= 5)
+# 
+# # 20% of sample for model building
+# set.seed(10)
+# ad_1st_test <-  ad_1st %>% 
+#   ungroup() %>% 
+#   dplyr::sample_frac(size= .2, replace = FALSE)
+# 
+# # 60% of sample reserved for analysis
+# ad_1st_analysis <- ad_1st %>% 
+#   anti_join(ad_1st_test, by = "id")
+# 
+# length(unique(ad_1st$user_id))
+# table(ad_1st$num_exposures)
+# 
+# # save data set
+# write.csv(ad_1st_test, "/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/testing_data_set2.csv")
+# write.csv(ad_1st_analysis, "/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/analysis_data_set2.csv")
+
+ad_1st_test<- read.csv("./TEACHassist_data2/testing_data_set2.csv")
+
+
+# long data for testing (using the students for the first encounter data set)
+ad_long_test <- ad_1st_test %>%
+  select(user_id) %>%
+  left_join(ad,
+            by = "user_id")
+
+
+```
+
+
+## Multilevel Modeling
+* Random intercepts included for the problems for first encounter analyses
+
+* Random intercepts included for the problems and students for multiple encounter analyses
+  * may include random intercepts and effects for content creators 
+
+* For Cross classified: 
+  * Students can be nested within multiple encounters and use multiple problems 
+  * problems can have different sets of students
+
+# Assumptions
+## Frequencies
+```{r}
+#number of students
+length(unique(ad$user_id))
+
+# of problems
+length((ad$problem_id))
+
+# treatment/control
+table(ad$randomized_between_tutor_strategies)/length(ad$randomized_between_tutor_strategies)
+# there are far more students in the control in this case, which is the opposite of the previous study --> did the randomization rules change between 
+
+# this distribution is fairly consistent amount test data sets
+table(ad_1st_test$randomized_between_tutor_strategies)/length(ad_1st_test$randomized_between_tutor_strategies)
+table(ad_long_test$randomized_between_tutor_strategies)/length(ad_long_test$randomized_between_tutor_strategies)
+
+# make sure that no one in the conrtol got the treatment
+table(ad$randomized_between_tutor_strategies, ad$randomized_with_control)
+table(ad$randomized_between_tutor_strategies, ad$tutoring_observed)
+
+# types of tutoring 
+table(ad$hint, ad$explanation
+      )
+
+#need to figure out what this means --> for now exclude
+table(ad$assigned_tutor_strategy_id == 0)
+
+
+```
+
+## Descriptives
+```{r}
+
+## Next problem correctness
+describe(ad_1st_test$next_problem_correctness)
+describeBy(ad_1st_test$next_problem_correctness, ad_1st_test$randomized_between_tutor_strategies)
+t.test(ad_1st_test$next_problem_correctness ~ ad_1st_test$randomized_between_tutor_strategies) # simple test --> no difference between treatment and control
+
+## assuming that if the students didn't complete the problem they got if wrong
+table(is.na(ad_1st_test$next_problem_correctness))
+ad_1st_test$next_problem_correctness_adj <- ifelse(is.na(ad_1st_test$next_problem_correctness) == T, 0,
+                                              (ad_1st_test$next_problem_correctness))
+table(is.na(ad_1st_test$next_problem_correctness_adj))
+describeBy(ad_1st_test$next_problem_correctness_adj, ad_1st_test$randomized_between_tutor_strategies)
+t.test(ad_1st_test$next_problem_correctness ~ ad_1st_test$randomized_between_tutor_strategies) # simple test --> no difference between treatment and control
+
+## Prior accuracy
+describe(ad_1st_test$prior_accuracy)
+describeBy(ad_1st_test$prior_accuracy, ad_1st_test$randomized_between_tutor_strategies)
+t.test(ad_1st_test$prior_accuracy ~ ad_1st_test$randomized_between_tutor_strategies) #  not statistically sig
+
+# mean center prior accuracy
+mean(ad_1st_test$prior_accuracy, na.rm = T)
+ad_1st_test$prior_accuracy_mc <- ad_1st_test$prior_accuracy - mean(ad_1st_test$prior_accuracy, na.rm = T) 
+describe(ad_1st_test$prior_accuracy_mc)
+
+ggplot(data = ad_1st_test, aes(x= prior_accuracy, group = as.factor(randomized_between_tutor_strategies), fill = as.factor(randomized_between_tutor_strategies))) +
+  geom_density(alpha = .6) +
+  theme_minimal()
+
+
+## Problem Difficulty
+describe(ad_1st_test$problem_avg_accuracy)
+
+ggplot(data = ad_1st_test %>%
+         select(problem_id, problem_avg_accuracy) %>%
+         distinct()
+         , aes(x= problem_avg_accuracy)) +
+  geom_density(fill = "gray") +
+  theme_minimal()
+
+# mean center problem_avg_accuracy
+mean(ad_1st_test$problem_avg_accuracy, na.rm = T)
+ad_1st_test$problem_avg_accuracy_mc <- ad_1st_test$problem_avg_accuracy - mean(ad_1st_test$problem_avg_accuracy, na.rm = T) 
+describe(ad_1st_test$problem_avg_accuracy_mc)
+
+# Colinearity 
+
+cor.test(ad_1st_test$problem_avg_accuracy, 
+         ad_1st_test$prior_accuracy)
+# small sig positive correlation
+
+
+
+```
+
+
+# Prelimiary Results: Test Models
+
+## Q1: Total Effect of Treatement on Intent to Treat 
+
+#### First exposre models
+
+```{r, warning=FALSE}
+
+# null model
+
+m1.Null <- glmer(
+  next_problem_correctness ~
+  (1|problem_id),
+  data = ad_1st_test,
+  family = binomial
+)
+
+m1.1 <- glmer(
+  next_problem_correctness ~
+        randomized_between_tutor_strategies +
+  (1|problem_id), 
+  data = ad_1st_test[],
+  family = binomial
+)
+  # note that there is no reduction in deviance between models
+
+# add student level prior accuracy
+m1.2 <- glmer(
+  next_problem_correctness ~
+    randomized_between_tutor_strategies +
+    prior_accuracy_mc + 
+  (1|problem_id )
+  ,
+  data = ad_1st_test,
+  family = binomial
+)
+  # substantial reduction in deviance
+
+# Treatment effect on the treated
+m1.3 <- glmer(
+  next_problem_correctness ~
+    randomized_between_tutor_strategies +
+        prior_accuracy_mc + 
+        problem_avg_accuracy_mc +
+  (1|problem_id)
+  ,
+  data = ad_1st_test,
+  family = binomial
+)
+  # Minimal reduction in deviance
+tab_model(m1.Null,
+          m1.1,
+          m1.2,
+          m1.3,
+            collapse.ci = T,
+  show.aic = T)
+```
+
+### All exposure models
+```{r}
+# # null model
+# 
+# m1.Null_long <- glmer(
+#   next_problem_correctness ~
+#       (1|user_id) +
+#   (1|problem_id),
+#   data = ad_long_test,
+#   family = binomial
+# )
+# summary(m1.Null_long)
+# 
+# m1.1_long <- glmer(
+#   next_problem_correctness ~
+#         randomized_between_tutor_strategies +
+#           (1|user_id) +
+#   (1|problem_id), 
+#   data = ad_long_test,
+#   family = binomial
+# )
+# summary(m1.1_long)
+#   # note that there is no reduction in deviance between models
+# 
+# # add student level prior accuracy
+# m1.2_long <- glmer(
+#   next_problem_correctness ~
+#     randomized_between_tutor_strategies +
+#     prior_accuracy + 
+#           (1|user_id) +
+#   (1|problem_id )+
+#   (1|assigned_tutor_strategy_id)
+#   ,
+#   data = ad_long_test,
+#   family = binomial
+# )
+# summary(m1.2_long)
+#   # substantial reduction in deviance
+# 
+# # Treatment effect on the treated
+# m1.3_long <- glmer(
+#   next_problem_correctness ~
+#     randomized_between_tutor_strategies +
+#         prior_accuracy + 
+#         problem_avg_accuracy +
+#           (1|user_id) +
+#   (1|problem_id)+
+#   (1|assigned_tutor_strategy_id)
+#   ,
+#   data = ad_long_test,
+#   family = binomial
+# )
+# summary(m1.3_long)
+#   # Minimal reduction in deviance
+# 
+# tab_model(m1.Null_long,
+#           m1.1_long,
+#           m1.2_long,
+#           m1.3_long,
+#             collapse.ci = T,
+#   show.aic = T)
+```
+
+
+## Q2: Interaction between Treatement & Student Ability
+```{r}
+#First Exposure Model
+
+m2 <- glmer(
+  next_problem_correctness ~
+    randomized_between_tutor_strategies*prior_accuracy_mc +
+        prior_accuracy_mc + 
+  (1|problem_id)+
+  (1|assigned_tutor_strategy_id),
+  data = ad_1st_test,
+  family = binomial
+)
+
+# # All Exposures Model
+# 
+# m2_long <- glmer(
+#   next_problem_correctness ~
+#     randomized_between_tutor_strategies*prior_accuracy +
+#         prior_accuracy + 
+#     (1|user_id) +
+#   (1|problem_id)+
+#   (1|assigned_tutor_strategy_id),
+#   data = ad_long_test,
+#   family = binomial
+# )
+
+tab_model(m2,
+        #  m2_long,
+            collapse.ci = T,
+  show.aic = T)
+```
+ 
+## Q3: Interaction between Treatment and Problem Difficulty
+```{r}
+# First Exposure Model
+m3 <- glmer(
+  next_problem_correctness ~
+    randomized_between_tutor_strategies*problem_avg_accuracy_mc +
+        prior_accuracy_mc + 
+        problem_avg_accuracy_mc  +
+  (1|problem_id) +
+  (1|assigned_tutor_strategy_id)
+  ,
+  data = ad_1st_test,
+  family = binomial
+)
+# 
+# # All Exposures Model
+# m3_long <- glmer(
+#   next_problem_correctness ~
+#     randomized_between_tutor_strategies*problem_avg_accuracy +
+#         problem_avg_accuracy  +
+#   (1|user_id) +
+#   (1|problem_id) +
+#   (1|assigned_tutor_strategy_id)
+#   ,
+#   data = ad_long_test,
+#   family = binomial)
+tab_model(m3,
+        #  m3_long,
+            collapse.ci = T,
+  show.aic = T)
+```

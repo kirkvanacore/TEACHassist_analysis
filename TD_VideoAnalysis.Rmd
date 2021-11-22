@@ -1,0 +1,236 @@
+---
+title: "TEACHERassist_Features"
+author: "Kirk Vanacore"
+date: "11/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+####Installing & Loading Packages###
+library(psych)
+library(lme4)
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(ggExtra)
+library(hexbin)
+library(sjPlot)
+```
+
+# Sample
+``` {r, include = FALSE}
+# read Treatment Control analysis data
+data <- read.csv("/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/analysis_complete_data.csv")
+colnames(data)
+
+
+## Pull out only randomized_between_tutor_strategies
+table(data$randomized_between_tutor_strategies)
+bwT <- data %>%
+  filter(randomized_between_tutor_strategies == 1)
+
+
+
+### Isolate Thea Durling vs Thea Durling 
+# Thea Durling -> 
+# 436143/tdurling@gdrsd.org
+# 255574/thea.durling@gmail.com
+table(bwT$content_creator_id == 436143 | bwT$content_creator_id == 255574 ) # 44877
+
+table(bwT$alternative_tutor_strategy_id_1 == 436143) # 44877
+
+##### add TEACHERassits (Tutor) Features
+taf <- read.csv("/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/tutor_strategy_features.csv")
+colnames(taf)
+
+length(unique(taf$tutor_strategy_id)) # some duplicated ids!!
+table(duplicated(taf$tutor_strategy_id))
+table(duplicated(taf$tutor_strategy_id))/length(taf$tutor_strategy_id)
+
+taf$dup <- duplicated(taf$tutor_strategy_id)
+table(taf$dup)
+
+table(taf$al)
+
+###DUPLICATES 
+taf$dup <- duplicated(taf$tutor_strategy_id)
+table(taf$dup, taf$content_creator_id == 436143 | taf$content_creator_id == 255574 ) # TD has dups
+
+dup <- taf %>%
+  arrange(tutor_strategy_id) %>%
+  filter((duplicated(tutor_strategy_id) | duplicated(tutor_strategy_id, fromLast=TRUE)))
+# none of the duplicates for TD switch from video to no video or vs versa --> VIDEO VARIABLES IS SAFE IF I REMOVE DUPLCAITES
+
+### !!! temporarily remove duplicates #######
+taf <- taf %>% 
+  filter(dup == F) %>%
+  select(-dup)
+
+length(unique(taf$content_creator_id)) # 19 content creators
+table(taf$content_creator_id)
+
+class(bwT$alternative_tutor_strategy_id_1)
+class(taf$tutor_strategy_id)
+
+td <- bwT %>%
+  filter(content_creator_id == 436143 | content_creator_id == 255574 ) %>%
+  left_join(taf %>%
+              select(tutor_strategy_id,
+                     content_creator_id,
+                     hint,
+                     explanation,
+                     contains_video
+                     ) %>%
+            rename(alt_hint= hint,
+                   alt_content_creator_id = content_creator_id ,
+                   alt_explanation = explanation ,
+                   alt_contains_video =  contains_video 
+                   )
+            ,
+            by = c("alternative_tutor_strategy_id_1" = "tutor_strategy_id"))
+
+# isolate where TD vs TD
+table(td$alt_content_creator_id == 436143 | td$alt_content_creator_id == 255574) # 15784 
+
+td$tdVtd <- ifelse((td$alt_content_creator_id == 436143 | td$alt_content_creator_id == 255574) == T, 1, 0)
+
+table(td$tdVtd)
+
+td <- td %>%
+  filter(tdVtd == 1)
+
+table(td$hint)
+table(td$hint)
+
+#table(td$contains_image, td$contains_videotd$contains_image, td$contains_video)
+
+
+# remove istances where neither contains video
+table(td$alt_contains_video, td$contains_video)
+td <- td %>%
+  filter((alt_contains_video == 0 & contains_video == 0 )==F)
+
+# # save data set
+# write.csv(td, "/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/tc_testing_data_set_allexposers.csv")
+# 
+
+```
+
+
+## Videos vs Text/Image
+```{r}
+## Next problem correctness
+
+# test sample
+describe(td$next_problem_correctness_adjusted)
+describeBy(td$next_problem_correctness_adjusted, td$contains_video)
+t.test(td$next_problem_correctness_adjusted ~ td$contains_video) # simple test --> no difference between treatment and control
+
+## Prior accuracy
+describe(td$prior_accuracy)
+describeBy(td$prior_accuracy, td$treatment)
+t.test(td$prior_accuracy ~ td$contains_video) #  not statistically sig
+
+# mean center prior accuracy
+mean(td$prior_accuracy, na.rm = T)
+td$prior_accuracy_mc <- td$prior_accuracy - mean(td$prior_accuracy, na.rm = T) 
+describe(td$prior_accuracy_mc)
+
+ggplot(data = td, aes(x= prior_accuracy, group = as.factor(treatment), fill = as.factor(treatment))) +
+  geom_density(alpha = .6) +
+  theme_minimal()
+
+
+## Problem Difficulty
+describe(td$problem_difficulity_est)
+
+ggplot(data = td %>%
+         select(problem_id, problem_difficulity_est) %>%
+         distinct()
+         , aes(x= problem_difficulity_est)) +
+  geom_density(fill = "gray") +
+  theme_minimal()
+
+# mean center problem_difficulity_est
+mean(td$problem_difficulity_est, na.rm = T)
+td$problem_difficulity_est_mc <- td$problem_difficulity_est - mean(td$problem_difficulity_est, na.rm = T) 
+describe(td$problem_difficulity_est_mc)
+
+# Colinearity 
+cor.test(td$problem_difficulity_est, 
+         td$prior_accuracy)
+# small sig positive correlation
+```
+
+``` {r}
+table(td$hint)
+
+### ALL OF THE HINTS DO NOT HAVE VIDEOS, MOST OF THE EXPLICATIONS DO HAVE VIDEOS
+table(td$hint, td$explanation)
+table(td$contains_video, td$explanation)
+
+# null model
+m1.Null <- glmer(
+  next_problem_correctness_adjusted ~
+  (1+  contains_video |problem_id) +
+  (1|user_id),
+  data = td,
+  family = binomial
+)
+summary(m1.Null)
+
+td$hint_adj <- ifelse(is.na(td$hint), 0, td$hint)
+
+m1.1 <- glmer(
+  next_problem_correctness_adjusted ~
+        contains_video +
+  (1+  contains_video |problem_id)+
+  (1|user_id), 
+  data = td,
+  family = binomial)
+summary(m1.1)
+
+
+
+# add student level prior accuracy
+m1.2 <- glmer(
+  next_problem_correctness_adjusted ~
+    contains_video +
+    prior_accuracy + 
+  (1+  contains_video |problem_id )+
+  (1|user_id)
+  ,
+  data = td,
+  family = binomial
+)
+summary(m1.2)
+
+# Treatment effect on the treated
+m1.3 <- glmer(
+  next_problem_correctness_adjusted ~
+    contains_video +
+    prior_accuracy + 
+    problem_difficulity_est +
+  (1 + contains_video |problem_id)+
+  (1|user_id)
+  ,
+  data = td,
+  family = binomial
+)
+summary(m1.3)
+
+
+  # Minimal reduction in deviance
+tab_model(m1.Null,
+          m1.1,
+          m1.2,
+          m1.3,
+            collapse.ci = T,
+  show.aic = T)
+```
+

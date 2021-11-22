@@ -1,5 +1,3 @@
-# TEACHERassist_analysis 
-
 ## Analysis Notes
 
 TEACHERassist Analysis

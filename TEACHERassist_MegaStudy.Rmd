@@ -1,0 +1,1027 @@
+---
+title: "TEACHERassist Mega Study"
+author: "Kirk Vanacore"
+date: "11/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Packages
+```{r, include=FALSE}
+####Installing & Loading Packages###
+library(psych)
+library(lme4)
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(ggExtra)
+library(hexbin)
+library(sjPlot)
+library(broom)
+library(dplyr)
+library(tidyr) #nest
+library(broom) #tidy
+library(purrr) #map
+```
+
+# Data Prep
+
+### Load Student Attempt Data 
+``` {r, include = FALSE}
+# read data
+data <- read.csv("/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/analysis_complete_data.csv")
+colnames(data)
+
+bwT <- data %>%
+  filter(randomized_between_tutor_strategies == 1)
+
+# how many problems
+length(unique(bwT$problem_id))
+
+# how many tutoring strategies
+length(unique(bwT$assigned_tutor_strategy_id)) 
+
+
+# how times are there more than 2 strategies
+length(unique(bwT$alternative_tutor_strategy_id_2)) 
+
+# how times are there more than 3 strategies
+length(unique(bwT$alternative_tutor_strategy_id_3)) # 49
+
+# isolate when there are only 2 possible strategy
+two_conditions <- bwT %>% 
+  filter(is.na(alternative_tutor_strategy_id_2))
+
+length(unique(two_conditions$problem_id)) #2976
+length(unique(two_conditions$assigned_tutor_strategy_id)) # 5978 --> 
+
+
+
+# CHECK -> for each problem there should only be 2 tutoring strategies 
+
+Experiments <- two_conditions %>%
+  select(problem_id,
+         assigned_tutor_strategy_id,
+         alternative_tutor_strategy_id_1) %>%
+  group_by(problem_id,
+         assigned_tutor_strategy_id,
+         alternative_tutor_strategy_id_1) %>%
+  summarise(n_attempts = (n())) # NUMBER OF attempt PER CONDITION
+
+Experiments <- Experiments %>%
+   group_by(problem_id) %>%
+    mutate(n_attempts = sum(n_attempts)) %>% # N attempts per problem
+   mutate(n_conditions_per_problem = (n())) # N conditions
+
+
+table(Experiments$n_conditions_per_problem) # there are 2,671 problems with conditions with 2 conditions problem
+
+
+# add in a random dummy variable for "treatment_random"
+Experiments <- Experiments %>% 
+  filter(n_conditions_per_problem == 2) %>%
+  group_by(problem_id) %>%
+  arrange(assigned_tutor_strategy_id) %>%
+  mutate(treatment=seq(n())) %>% 
+     distinct( .keep_all=TRUE)
+
+Experiments$treatment_random <- ifelse(Experiments$treatment ==1, 1, 0)
+
+bwT$alternative_tutor_strategy_id_1
+ad <- Experiments %>%
+  select(
+        -treatment) %>%
+  left_join(bwT %>%
+              select(-treatment),
+            by = c("problem_id",
+                   "assigned_tutor_strategy_id",
+                   "alternative_tutor_strategy_id_1")) %>%
+  select(
+    -tutor_strategy_raw_html,
+    -content_creator_id,
+    -hint,
+    -explanation,
+    -message_count,
+    -text_length,
+    -text_length_0_20,
+    -text_length_50_100,
+    -text_length_100_250,
+    -text_length_250_500,
+    -text_length_500_1000,
+    -text_length_1000_infinity,
+    -contains_video,
+    -contains_image,
+    -contains_link,
+    -color_use,
+    -font_use,
+    -text_size_use
+  )
+
+rm(bwT, two_conditions)
+
+length(unique(ad$problem_id)) #2671
+length(unique(ad$alternative_tutor_strategy_id_1)) # 5978 --> 
+
+```
+### Load Tutor Meta Data
+```{r}
+##### add TEACHERassits (Tutor) Features
+taf <- read.csv("/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/tutor_strategy_features.csv")
+colnames(taf)
+
+length(unique(taf$tutor_strategy_id)) # some duplicated ids!!
+# determined with Karthick that that these are not duplicates, but individual messages that are apart of each tutor strategy
+table(taf$message_count)
+
+# collapse to one row per tutor_strategy_id
+taf_collapsed <- taf %>%
+  group_by(tutor_strategy_id) %>%
+  mutate(message_count = sum(message_count)) %>%
+  mutate(text_length = sum(text_length)) %>%
+  mutate(images = sum(contains_image)) %>%
+  mutate(videos = sum(contains_video)) %>%
+  mutate(hint = sum(hint)) %>%
+  mutate(explanation = sum(explanation)) %>%
+  select(tutor_strategy_id,
+         content_creator_id,
+         message_count,
+         text_length,
+         images,
+         videos,
+         hint,
+         explanation
+         ) %>%
+  distinct()
+
+# check hints
+table(taf_collapsed$hint, taf_collapsed$message_count) # this should be an indicator
+taf_collapsed$hint <- ifelse(taf_collapsed$hint == 0, 0, 1)
+
+# check explanation
+table(taf_collapsed$explanation)
+
+
+table(taf_collapsed$message_count)
+length(unique(taf_collapsed$tutor_strategy_id)) # some duplicated ids!!
+
+# add tutor meta data to students attempt data
+colnames(ad)
+
+ad <- ad %>%
+  left_join(taf_collapsed,
+            by = c("assigned_tutor_strategy_id" ="tutor_strategy_id")) %>%
+   left_join(taf_collapsed,
+            by = c("alternative_tutor_strategy_id_1" ="tutor_strategy_id"))
+colnames(ad)
+ # x -> assigned
+# y -> alternative
+
+## calculate difference between the assigned and alt strategies
+  # message_count
+  # text_length
+  # images
+  # videos
+  # hint
+  # explanation
+
+
+treat_probs <-ad %>%
+  ungroup() %>%
+              filter(treatment_random == 1) %>%
+              select(problem_id,
+                    text_length.x,
+                    message_count.x,
+                    videos.x,
+                    hint.x,
+                    explanation.x,
+                    images.x,
+                    text_length.y,
+                    message_count.y,
+                    videos.y,
+                    hint.y,
+                    explanation.y,
+                    images.y) %>%
+            distinct()
+table(duplicated(treat_probs$problem_id))
+
+# num messages
+table(treat_probs$message_count.x)
+table(treat_probs$message_count.x, treat_probs$message_count.y)
+treat_probs$message_count_diff <- treat_probs$message_count.x - treat_probs$message_count.y
+hist(treat_probs$message_count_diff)
+
+# text_length 
+describe(treat_probs$text_length.x)
+treat_probs$text_length_dif <-treat_probs$text_length.x - treat_probs$text_length.y
+hist(treat_probs$text_length_dif)
+describe(treat_probs$text_length_dif)
+
+# Images
+treat_probs$images_diff <- treat_probs$images.x - treat_probs$images.y
+table(treat_probs$images_diff)
+hist(treat_probs$images_diff)
+
+# binary code
+treat_probs$images.xB <- ifelse(treat_probs$images.x > 0, 1,0 )
+treat_probs$images.yB <- ifelse(treat_probs$images.y > 0, 1,0 )
+
+treat_probs$imagesB_diff <- treat_probs$images.xB - treat_probs$images.yB
+table(treat_probs$imagesB_diff)
+
+# Videos
+table(treat_probs$videos.x)
+table(treat_probs$videos.y)
+
+table(treat_probs$videos.x, treat_probs$videos.y)
+table(treat_probs$videos.x, treat_probs$videos.y)/length(treat_probs$videos.x) # 
+
+treat_probs$videos_diff <- treat_probs$videos.x - treat_probs$videos.y
+table(treat_probs$videos_diff)
+table(treat_probs$videos_diff, treat_probs$videos.x, treat_probs$videos.y)
+
+
+# -1 -> experimental conditions where students did not have a video, but would have in the alt condition
+# 0 -> experiments where students either don't have accesses to a video in either condition or inb both conditions
+# 1 -> experimental conditions where students did have a video, but wouldn't have in the alt condition
+
+#hints
+treat_probs$hint_diff <- treat_probs$hint.x - treat_probs$hint.y
+table(treat_probs$hint_diff)
+table(treat_probs$hint_diff, treat_probs$hint.x)
+table(treat_probs$hint_diff, treat_probs$hint.y)
+table(treat_probs$hint_diff==0, treat_probs$hint.y)
+table(treat_probs$hint_diff==0, treat_probs$hint.x)
+
+# explanations
+treat_probs$explanation_diff <- treat_probs$explanation.x - treat_probs$explanation.y
+table(treat_probs$explanation_diff)
+table(treat_probs$explanation_diff, treat_probs$explanation.x, treat_probs$explanation.y)
+table(treat_probs$explanation_diff, treat_probs$hint_diff)
+
+ad <- ad %>%
+  left_join(treat_probs %>%
+              select(-text_length.x,
+                    -message_count.x,
+                    -videos.x,
+                    -hint.x,
+                    -images.x,
+                    -text_length.y,
+                    -message_count.y,
+                    -videos.y,
+                    -hint.y,
+                    -images.y),
+            by = "problem_id"
+  )
+
+
+check <- ad %>%
+  filter(problem_id == 1479204)
+
+colnames(ad)
+```
+
+
+
+# Indvidual models for each problem/experiment
+```{r}
+# STEP 1
+# 1. breaks down each experiment and estimated effects and SE, and contrasts bw features
+# lm(weights: 1/sq(SE))
+
+
+my_lm <- function(df) {
+  summary(
+    glm(
+      next_problem_correctness_adjusted ~ 
+        # add in student/problem cov
+        treatment_random,
+      data = df,
+      family = binomial 
+    )
+  )
+}
+mod_summaries<- by(ad %>%
+     select(
+       next_problem_correctness_adjusted,
+       treatment_random,
+       problem_id
+     ), as.factor(ad$problem_id), my_lm)
+
+# mod_summaries
+# coefs<-lapply(mod_summaries,function(x)coef(x))
+# coefs
+
+
+intercepts<- as.data.frame(t(as.data.frame(lapply(mod_summaries,function(x)coef(x)[1,]))))
+coefficients<- as.data.frame(t(as.data.frame(lapply(mod_summaries,function(x)coef(x)[2,]))))
+coefficients
+describe(coefficients$Estimate)
+plot(coefficients$`Std. Error`, coefficients$Estimate)
+
+
+table(coefficients$`Pr(>|z|)` < .05)
+
+# 2. fit the treatment effect as a function of all of the predictors
+colnames(coefficients)
+library(tibble)
+coefficients <- tibble::rownames_to_column(coefficients, "problem_id")
+coefficients$problem_id<-gsub("[^0-9.-]", "", coefficients$problem_id)
+class(coefficients$problem_id)
+class(ad$problem_id)
+ad$problem_id <- as.character(ad$problem_id)
+
+treat_probs <-ad %>%
+              filter(treatment_random == 1) %>%
+              select(problem_id,
+                    text_length.x,
+                    message_count.x,
+                    videos.x,
+                    hint.x,
+                    images.x) %>%
+            distinct()
+treat_probs$dup <- duplicated(treat_probs$problem_id)
+
+coefficients <- coefficients %>%
+  left_join(
+    ad %>%
+      filter(treatment_random == 1) %>%
+      select(
+        
+        text_length_dif,
+        message_count_diff,
+        videos_diff,
+        hint_diff,
+        images_diff
+      ) %>%
+      distinct(),
+    by = "problem_id"
+  )
+colnames(coefficients)
+
+
+coefficients$weights <- 1/(coefficients$`Std. Error`*coefficients$`Std. Error`)
+
+
+
+m_estimates1 <-lm(Estimate ~
+     videos_diff,
+   data = coefficients,
+   weights = weights
+   )
+summary(m_estimates1)
+
+m_estimates2 <-lm(Estimate ~
+     images_diff,
+   data = coefficients,
+   weights = weights)
+summary(m_estimates2)
+
+m_estimates3 <-lm(Estimate ~
+     message_count_diff,
+   data = coefficients,
+   weights = weights)
+summary(m_estimates3) # sig
+
+m_estimates4 <-lm(Estimate ~
+     hint_diff,
+   data = coefficients,
+   weights = weights)
+summary(m_estimates4) # sig
+
+m_estimates5 <-lm(Estimate ~
+     scale(text_length_dif),
+   data = coefficients,
+   weights = weights)
+summary(m_estimates5) 
+
+
+
+
+```
+
+# Pooled Models
+### Subset 
+#### GLM
+```{r}
+
+# create subset
+ad_small <- ad %>%
+  filter(n_attempts >= 200)
+length(unique(ad$problem_id))
+length(unique(ad_small$problem_id))
+
+# Null Model 
+mNull <- glmer(next_problem_correctness_adjusted ~
+  + (1|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(mNull)
+
+# Add random intercept for 
+m1.1 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+  + (1 |problem_id) ,
+  data =ad,
+  family = binomial
+)
+summary(m1.1)
+
+
+# Add random intercept for 
+m1.2 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+  + (1 + treatment_random|problem_id) ,
+  data =ad,
+  family = binomial
+)
+summary(m1.2)
+
+anova(m1.1, m1.2) # p value for whether the variance for treatment_random is == 0
+
+
+# add difficulty/ability measures
+m2 <- glmer(next_problem_correctness_adjusted ~
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + treatment_random
+              + (1 + treatment_random|problem_id),
+  data =ad,
+  family = binomial
+)
+summary(m2)
+
+# Video
+m3 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + videos_diff 
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m3)
+
+
+# only slight reductions in deviance
+
+# add explaintion with videos in model
+m4 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + videos_diff 
+              + explanation_diff 
+
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m4)
+
+
+m5 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + videos_diff 
+              + images_diff 
+              + explanation_diff 
+
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m5)
+
+m6 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + videos_diff 
+              + images_diff 
+              + message_count_diff
+   + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m6)
+
+# message count not sig and videos not increased 
+
+
+# text length
+m7 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + videos_diff 
+              + images_diff 
+              + message_count_diff
+              + scale(text_length_dif)
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m7)
+
+tab_model(mNull, m1, m2, m3, m4)
+tab_model(m1, m2, m3, m4, m5)
+
+```
+
+
+
+```{r}
+data$next_problem_correctness <- ifelse(is.na(data$next_problem_correctness), 0, data$next_problem_correctness)
+
+data$problem_id_4stan <- as.numeric(as.factor((data$problem_id)))
+min(data$problem_id_4stan)
+max(data$problem_id_4stan)
+
+stan_data <-  list(N=nrow(data), 
+                   y=data$next_problem_correctness,
+                   treatment=data$treatment,
+                   problem_id =data$problem_id_4stan,
+                   N_prob = length(unique(data$problem_id))
+                   )
+```
+
+#### Baysean Model
+
+```{r}
+
+# create subset
+ad_small <- ad %>%
+  ungroup() %>%
+  filter(n_attempts >= 300) %>%
+  mutate(problem_id_N = as.numeric(as.factor((problem_id))))
+
+summary(ad$n_attempts)
+length(unique(ad$problem_id))
+length(unique(ad_small$problem_id)) 
+class(ad_small$problem_id)
+
+Problem_features <- ad_small %>%
+  ungroup() %>%
+  select(problem_id_N, explanation_diff, text_length_dif) %>%
+  distinct() 
+
+stan_data <-  list(N=nrow(ad_small), 
+                   y=ad_small$next_problem_correctness_adjusted,
+                   treatment=ad_small$treatment_random,
+                   problem_id = ad_small$problem_id_N,
+                   N_prob = length(unique(ad_small$problem_id_N)),
+                   feature1 = Problem_features$explanation_diff,
+                   feature2 = Problem_features$text_length_dif
+                   )
+str(stan_data)
+```
+
+STAN CODE
+``` 
+
+data {
+  int<lower=0> N; //number of problem/attempts
+  int<lower=0> N_prob; // number of problems
+  int<lower=0, upper=N_prob> problem_id[N]; // num proups
+  int<lower=0,upper=1> y[N]; 
+  int<lower=0,upper=1> treatment[N]; // N after name makes this a list
+  real feature1[N_prob];
+  real feature2[N_prob];
+  
+}
+
+parameters {
+  real<lower=0> sigma0;
+  real<lower=0> sigma1;
+  real b0[N_prob];
+  real g0;
+  real g10;
+  real g11;
+    real g12;
+ // real<lower=-1,upper=1> rho; // for one correlation
+  corr_matrix[2] Omega;        // prior correlation
+  vector<lower=0>[2] tau;      // prior scale 
+  vector[2] b[N_prob]; // hint, err, time
+
+}
+
+transformed parameters {
+    cov_matrix[2] SigmaProb;
+    SigmaProb = quad_form_diag(Omega, tau);
+
+}
+
+model {
+  vector[2] bMean[N_prob];  
+  for(i in 1:N_prob){
+    bMean[i][1]=0;
+    bMean[i][2]=g10+g11*feature1[i]++g12*feature1[2];
+    }
+  
+  // priors
+  tau ~ cauchy(0, 2.5); // SD of intercepts and slope // cauchy allows for a weak prior b/c of its large outliers and it is unpredictable
+  Omega ~ lkj_corr(2); //prior 
+  
+  b~multi_normal(bMean,SigmaProb);
+
+  for (i in 1:N){
+  y[i] ~ bernoulli_logit(
+      b[problem_id[i]][1] + // random intcercpt
+      b[problem_id[i]][2]*treatment[i] // random effect of treatement
+    );
+    }
+}
+
+```
+
+
+get b1 b0 to correlate with one another
+https://mc-stan.org/docs/2_28/stan-users-guide/multivariate-hierarchical-priors.html
+g and h -> chapter 13/chapter 17
+drawing b1 and b0 from a bivarte normal distribution, 
+var(x1) = sigma1sq = E[(x-m)^2]
+var(x2) = sigma2sq = E[(x2-m2)^2]
+cov(x1,x2) = E[(x-m)(x2-m2)]
+
+can be writen as a matrix
+need put the variance cov
+
+in the paramater set a variance convince
+
+HW -> add another feature 
+
+
+```{r}
+require(rstan)
+fit3 <- stan(file = 'stan_MLM_log_wCov.stan',
+            data = stan_data,
+            cores = 4)
+```
+```{r}
+print(fit3, par = c("b0", "b"), include=F, digits = 2)
+
+```
+
+```{r}
+print(fit1, par = c("b0"), include=F)
+
+print(fit2, par = c("b0"), include=F)
+
+```
+
+
+
+
+
+### GLM All Data
+```{r}
+
+# Null Model 
+mNull <- glmer(next_problem_correctness_adjusted ~
+  + (1|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(mNull)
+tab_model(mNull)
+# Add random intercept for 
+m1.1 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+  + (1 |problem_id) ,
+  data =ad,
+  family = binomial
+)
+summary(m1.1)
+
+
+# Add random intercept for 
+m1.2 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+  + (1 + treatment_random|problem_id) ,
+  data =ad,
+  family = binomial
+)
+summary(m1.2)
+
+anova(m1.1, m1.2) # p value for whether the variance for treatment_random is == 0
+
+
+# add difficulty/ability measures
+m2 <- glmer(next_problem_correctness_adjusted ~
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + treatment_random
+              + (1 + treatment_random|problem_id),
+  data =ad,
+  family = binomial
+)
+summary(m2)
+
+# Video
+m3 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + videos_diff 
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m3)
+
+
+# only slight reductions in deviance
+
+# add explanation with videos in model
+m4 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + videos_diff 
+              + explanation_diff 
+
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m4)
+
+
+m5 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + explanation_diff 
+
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m5)
+
+m6 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + message_count_diff
+   + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m6)
+
+# message count not sig and videos not increased 
+
+
+# text length
+m7 <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + scale(text_length_dif)
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m7)
+
+#all 
+m_all <- glmer(next_problem_correctness_adjusted ~
+              + treatment_random
+              + scale(problem_difficulity_est)
+              + scale(prior_accuracy)
+              + explanation_diff 
+              + message_count_diff
+              + scale(text_length_dif)
+              + videos_diff 
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m_all)
+
+m_all_wInteraction <- glmer(next_problem_correctness_adjusted ~
+              treatment_random*(
+              + explanation_diff 
+              + message_count_diff
+              + scale(text_length_dif)
+              + videos_diff) 
+              + scale(prior_accuracy)
+  + (1 + treatment_random|problem_id) 
+  ,
+  data =ad,
+  family = binomial
+)
+summary(m_all_wInteraction)
+
+#saveRDS(m_all, "m_all.rds")
+m_all<-readRDS("m_all.rds")
+tab_model(m_all)
+m_allsum<-summary(m_all)
+m_allsum
+coefficients(m_allsum)
+
+coefficients(m_all)
+
+anova(m1.2, m_all)
+length(unique(ad$user_id))
+
+length(unique(ad$content_creator_id))
+length(unique(ad$content_creator_id))
+length(unique(ad$assigned_tutor_strategy_id))
+length(unique(ad$alternative_tutor_strategy_id_1))
+
+describe(ad$text_length.y)
+
+
+write.csv(ad, "TEACHERSassit_analysis_data_setKV.csv")
+
+```
+
+Small technical note: If you try to rerun your study and you see a broken video here is the answer. Videos that were made before Jan 21st 2017, and that were listed as "unlisted" link in Youtube, were changed to "Private" on July 23, 2021.
+
+# Visualizations
+```{r}
+m_all<-readRDS("m_all.rds")
+tab_model(m_all)
+m_allsum<-summary(m_all)
+
+coefficients(m_all)$problem_id
+
+# extract random effects
+random_effects <- coefficients(m_all)$problem_id %>%
+  mutate(problem_id = row.names(coefficients(m_all)$problem_id)) %>%
+  rename(rand_intercept = `(Intercept)`,
+         rand_treatment_effect = treatment_random) %>%
+  select(problem_id, rand_intercept, rand_treatment_effect)
+
+# extract fixed effects
+fixed_effects <- as.data.frame(coefficients(m_allsum)) %>%
+    mutate(variable = row.names(as.data.frame(coefficients(m_allsum)))) %>%
+  select(variable, Estimate) %>%
+  spread(key = variable,
+         value = Estimate) 
+
+# add problem_experiment meta data
+random_effects <- random_effects %>%
+  left_join(treat_probs,
+            by = "problem_id")
+
+coefficients(m_allsum)
+random_effects$treatment_effect_difference <- NULL
+random_effects$logOdds_treatmentX <- fixed_effects$`(Intercept)` +
+  random_effects$rand_intercept +
+  fixed_effects$treatment_random + 
+  random_effects$rand_treatment_effect + 
+  fixed_effects$explanation_diff*random_effects$explanation_diff +
+  fixed_effects$message_count_diff*random_effects$message_count_diff +
+  fixed_effects$`scale(text_length_dif)`*scale(random_effects$text_length_dif) +
+  fixed_effects$videos_diff*random_effects$videos_diff
+
+random_effects$prob_treatmentX <- exp(random_effects$logOdds_treatmentX)/ (1+ exp(random_effects$logOdds_treatmentX))
+
+hist(random_effects$prob_treatmentX )
+
+random_effects$logOdds_treatmentY <- fixed_effects$`(Intercept)` +
+  random_effects$rand_intercept +
+  fixed_effects$treatment_random + 
+  random_effects$rand_treatment_effect 
+
+random_effects$prob_treatmentY <- exp(random_effects$logOdds_treatmentY)/ (1+ exp(random_effects$logOdds_treatmentY))
+hist(random_effects$prob_treatmentY )
+
+plot(random_effects$prob_treatmentX, random_effects$prob_treatmentY)
+table(random_effects$problem_id)
+
+random_effects$prob_treatment_diff <- abs( random_effects$prob_treatmentX-  random_effects$prob_treatmentY)
+
+describe(random_effects$prob_treatment_diff)
+summary(random_effects$prob_treatment_diff)
+quantile(random_effects$prob_treatment_diff, probs = .99)
+
+random_effects <- random_effects %>%
+  arrange(desc(prob_treatment_diff)) %>%
+  mutate(rank = rank(prob_treatment_diff))
+
+random_effects$explanation_diff_LABLE <-ifelse(abs(random_effects$explanation_diff) == 1, "Explanation vs Hint", "No Comparison")
+
+
+ggplot(random_effects #%>%
+      #   filter(prob_treatment_diff >= quantile(prob_treatment_diff, probs = .98))
+      ,
+       aes(y = as.factor(rank),
+           x = prob_treatmentX,
+           xmin = prob_treatmentX,
+           xmax = prob_treatmentY,
+           color = as.factor(explanation_diff_LABLE))
+       ) +
+  geom_point(alpha = 0) +
+  geom_errorbarh(height=1, alpha = .8) +
+  ylab("Experiments ") +
+  xlab("Probability of Next Problem Correct") +
+  theme(axis.text.y=element_blank(), #remove x axis labels
+        axis.ticks.y=element_blank(), #remove x axis ticks
+        legend.position="bottom",
+        legend.title = element_blank(),
+          panel.background = element_rect(fill = "white",
+                                colour = "white",
+                                size = 0.5, linetype = "solid"),
+        legend.key = element_rect(fill = "white")
+ 
+        ) 
+
+#adding a vertical line at the effect = 0 mark
+
+
+ggplot(
+  data = random_effects,
+  aes(x = prob_treatment_diff,
+      fill = explanation_diff_LABLE)) +
+  geom_density(adjust = 1.5, alpha = .7) +
+   theme_minimal()  +
+  ylab("Density ") +
+  xlab("Probability of Next Problem Correct") +
+  theme(axis.text.y=element_blank(), #remove x axis labels
+        axis.ticks.y=element_blank(), #remove x axis ticks
+        legend.position="bottom",
+        legend.title = element_blank(),
+          panel.background = element_rect(fill = "white",
+                                colour = "white",
+                                size = 0.5, linetype = "solid"),
+        legend.key = element_rect(fill = "white")
+ 
+        ) 
+
+ggplot(
+  data = random_effects,
+  aes(x = prob_treatment_diff,
+      y = text_length_dif,
+      color = explanation_diff_LABLE)) +
+  geom_point(adjust = 1.5, alpha = .5) +
+    geom_smooth(method='lm', formula= y~x) +
+   ylab("Difference in text Length ") +
+  xlab("Difference Probability of Next Problem Correct Between Conditions") +
+  theme(axis.text.y=element_blank(), #remove x axis labels
+        axis.ticks.y=element_blank(), #remove x axis ticks
+        legend.position="bottom",
+        legend.title = element_blank(),
+          panel.background = element_rect(fill = "white",
+                                colour = "white",
+                                size = 0.5, linetype = "solid"),
+        legend.key = element_rect(fill = "white")
+ 
+        ) 
+
+
+
+
+  ylab("Density ") +
+  xlab("Probability of Next Problem Correct") +
+  theme(axis.text.y=element_blank(), #remove x axis labels
+        axis.ticks.y=element_blank(), #remove x axis ticks
+        legend.position="bottom",
+        legend.title = element_blank(),
+          panel.background = element_rect(fill = "white",
+                                colour = "white",
+                                size = 0.5, linetype = "solid"),
+        legend.key = element_rect(fill = "white")
+ 
+        ) 
+
+  # labs(title = "Avg Session Time by Condition",
+  #      x = "Avg Minutes per Assignment") +
+  # theme(plot.title = element_text(hjust = 0.5)
+  #       )
+
+hist(random_effects$prob_treatment_diff, breaks = 1000)
+```
+
+$$pr(Next Problem Correct=1) = invLogit(\beta_{0j}+\beta_{1}Random Treatment_{i})$$ 
+
+ 
+
+$$\beta_0 = \gamma_{00} + \mu_{0j}$$ 
+
+ 
+
+$$\beta_1 = \gamma_{10} + gamma_{11}Feature1{j} + gamma_{12}Feature2{j} …. \mu_{1j}$$
+

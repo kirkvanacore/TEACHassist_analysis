@@ -290,8 +290,8 @@ colnames(ad)
 ```
 
 
-
-# Indvidual models for each problem/experiment
+# No-Pooling Models
+ Individual models for each problem/experiment
 ```{r}
 # STEP 1
 # 1. breaks down each experiment and estimated effects and SE, and contrasts bw features
@@ -408,7 +408,7 @@ summary(m_estimates5)
 
 ```
 
-# Pooled Models
+# Partial Pooled Models
 ### Subset 
 #### GLM
 ```{r}
@@ -691,7 +691,7 @@ print(fit2, par = c("b0"), include=F)
 
 
 
-### GLM All Data
+###GLM All Data
 ```{r}
 
 # Null Model 

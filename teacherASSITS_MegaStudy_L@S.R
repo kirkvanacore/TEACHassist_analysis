@@ -394,7 +394,7 @@ m1.6 <- glmer(next_problem_correctness_adjusted ~
 )
 summary(m1.6)
 
-# add images
+# add images 
 m1.7 <- glmer(next_problem_correctness_adjusted ~
                 + treatment_random*
                 (videos_diff +

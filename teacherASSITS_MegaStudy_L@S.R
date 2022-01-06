@@ -528,7 +528,7 @@ m1.7 <- glmer(next_problem_correctness_adjusted ~
               + (1 + treatment_random|problem_id) 
               ,
               data =ad,
-              family = binomial
+              family = binomial 
 )
 summary(m1.7)
 

@@ -232,5 +232,8 @@ tab_model(m1.Null,
           m1.3,
             collapse.ci = T,
   show.aic = T)
+
+table(td$)
+
 ```
 

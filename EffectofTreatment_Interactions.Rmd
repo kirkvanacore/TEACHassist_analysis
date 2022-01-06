@@ -261,6 +261,10 @@ tab_model(m1.Null,
           m1.4,
             collapse.ci = T,
   show.aic = T)
+
+table(tc_data_test$contains_video)
+table(tc_data_test$explanation)
+table(tc_data_test$contains_video, tc_data_test$explanation)
 ```
 
 

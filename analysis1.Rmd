@@ -10,31 +10,16 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r setup, include=FALSE}
+```{r, include=FALSE}
 ####Installing & Loading Packages###
-#create list of packages
-packages = c(
-  "psych",
-  "lme4",
-  "nlme",
-  "ggplot2",
-  "RColorBrewer",
-  "dplyr",
-  "ggExtra",
-  "hexbin"
-)
-#load install
-package.check <- lapply(
-  packages,
-  FUN = function(x) {
-    if (!require(x, character.only = TRUE)) {
-      install.packages(x, dependencies = TRUE)
-      library(x, character.only = TRUE)
-    }
-  }
-)
-#clear objects
-rm(packages, package.check)
+library(psych)
+library(lme4)
+library(nlme)
+library(ggplot2)
+library(RColorBrewer)
+library(dplyr)
+library(ggExtra)
+library(hexbin)
 ```
 
 ``` {r, include = FALSE}
@@ -55,19 +40,12 @@ length(unique(ad_10exposures$user_id))
 table(ad_10exposures$num_exposures)
 
 ```
+# Rational
 
-# The Experiment 
 
-## Levels of Randimization
-1. Encounter Level Randomization: Students are randomized into treatment and control for each problem
-  * treatment --> access to the TEACHassist Hints
-  * control --> no access to hint (with access to explanations)
-  * During the experiment students can be randomized into different conditions for different problems
-2. When there is more than one hint for the problem, students could have been randomized between multiple different hints
+# Research Questions 
 
-# Research Questions (first exposure)
-
-## Orginal Research questions
+## Orginal Research questions (first exposure)
 1. **Total Effect of Treatment on Intent to Treat:** What are the effects of TEACHassist accounting for problem difficulty and prior student performance?
 2. **Interaction between Treatment and Student Ability:** Does the effect of hints differ based upon students' previous performance? 
 3. **Interaction between Treatment and Problem Difficulty:** Does the effect of hints differ based upon the difficulty of the problems they are attempting?
@@ -78,15 +56,65 @@ table(ad_10exposures$num_exposures)
 5. Longitudinal effects of treatment -> effects accross mutiple exposures
 6. TEACHassist feature effects: Does TEACHassist effect vary based upon spe
 
+
+# The Experiment 
+
+## Levels of Randimization
+1. Encounter Level Randomization: Students are randomized into treatment and control for each problem
+  * treatment --> access to the TEACHassist Hints
+  * control --> no access to hint (with access to explanations)
+  * During the experiment students can be randomized into different conditions for different problems
+2. When there is more than one hint for the problem, students could have been randomized between multiple different hints
+
+# Sample
+
+
+
 # Method
 Multilevel Modeling
 * Random intercepts were included for the problems 
 * For Cross classified: Students can be nested within mutiple encounters and use multiple problems and problems can have different sets of students
 
-# Assumptions
-```{r, assumptions}
+# Descriptives & Assumptions
+```{r}
 
+# recode treatment/control
 table(ad$randomized_between_tutor_strategies, ad$randomized_with_control)
+
+## Next problem correctness
+describe(ad_1st[ad_1st$prior_num_problems >= 5,]$next_problem_correctness)
+describeBy(ad_1st[ad_1st$prior_num_problems >= 5,]$next_problem_correctness, ad_1st[ad_1st$prior_num_problems >= 5,]$randomized_between_tutor_strategies)
+
+## Prior accuracy
+describe(ad_1st[ad_1st$prior_num_problems >= 5,]$prior_accuracy)
+describeBy(ad_1st[ad_1st$prior_num_problems >= 5,]$prior_accuracy, ad_1st[ad_1st$prior_num_problems >= 5,]$randomized_between_tutor_strategies)
+t.test(ad_1st[ad_1st$prior_num_problems >= 5,]$prior_accuracy ~ ad_1st[ad_1st$prior_num_problems >= 5,]$randomized_between_tutor_strategies) # just barely not statistically sig
+
+ggplot(data = ad_1st[ad_1st$prior_num_problems >= 5,], aes(x= prior_accuracy, group = as.factor(randomized_between_tutor_strategies), fill = as.factor(randomized_between_tutor_strategies))) +
+  geom_density(alpha = .6) +
+  theme_minimal()
+
+
+## Problem Difficulty
+describe(ad_1st[ad_1st$prior_num_problems >= 5,]$average_correctness)
+
+  # I'm not breaking this down by treatment/control
+ggplot(data = ad_1st[ad_1st$prior_num_problems >= 5,] %>%
+         select(problem_id, average_correctness) %>%
+         distinct()
+         , aes(x= average_correctness)) +
+  geom_density(fill = "gray") +
+  theme_minimal()
+
+
+
+# Colinearity 
+
+cor.test(ad_1st[ad_1st$prior_num_problems >= 5,]$average_correctness, 
+         ad_1st[ad_1st$prior_num_problems >= 5,]$prior_accuracy)
+# small sig positive correlation
+
+
 
 ```
 
@@ -95,13 +123,12 @@ table(ad$randomized_between_tutor_strategies, ad$randomized_with_control)
 
 ## Q1: Total Effect of Treatement on Intent to Treat 
 ```{r, assumptions}
-
 # Treatment effect on the treated
 m1.1 <- glmer(
   next_problem_correctness ~
     randomized_between_tutor_strategies +
   (1|problem_id) +
-  (1|assigned_tutor_strategy_id) #im not sure whether this is okay, but it should be because,
+  (1|assigned_tutor_strategy_id), #im not sure whether this is okay, but it should be because,
   data = ad_1st[ad_1st$prior_num_problems >= 5,],
   family = binomial
 )
@@ -210,42 +237,54 @@ summary(m4.3)
 ## Q5: Logitudinal Effects: Effects accorss mutiple expsures
 ```{r}
 
+# low end center num_exposures
+ad_10exposures$num_exposures_lc <- ad_10exposures$num_exposures -1
+# because randomization on the student level, this may 
 
-m4.1 <- glmer(
+# look at likelihood of student use across exposures
+m5.1 <- glmer(
   next_problem_correctness ~
-    tutoring_observed_adjusted +
-    num_exposures +
+    randomized_between_tutor_strategies +
+    num_exposures_lc +
   (1|user_id) +
-  (1|problem_id) +
-  (1|assigned_tutor_strategy_id)
+  (1|problem_id) 
+    # note I took out the random intercept for hint id to make this run faster
   ,
   data = ad_10exposures[ad_1st$prior_num_problems >= 5,],
   family = binomial
 )
-summary(m4.1)
+summary(m5.1)
 
-m4.2 <- glmer(
+
+m5.2 <- glmer(
   next_problem_correctness ~
-    tutoring_observed_adjusted*prior_accuracy +
-        prior_accuracy + 
-        average_correctness  +
-  (1|problem_id)+
-  (1|assigned_tutor_strategy_id),
-  data = ad_1st[ad_1st$prior_num_problems >= 5,],
+    randomized_between_tutor_strategies +
+    num_exposures_lc +
+    prior_accuracy + 
+    average_correctness  +
+  (1|user_id) +
+  (1|problem_id) 
+  # note I took out the random intercept for hint id to make this run faster
+  ,
+  data = ad_10exposures[ad_1st$prior_num_problems >= 5,],
   family = binomial
 )
-summary(m4.2)
+summary(m5.2)
 
 
-m4.3 <- glmer(
+m5.3 <- glmer(
   next_problem_correctness ~
-    tutoring_observed_adjusted*average_correctness +
-        prior_accuracy + 
-        average_correctness  +
-  (1|problem_id)+
-  (1|assigned_tutor_strategy_id),
-  data = ad_1st[ad_1st$prior_num_problems >= 5,],
+    randomized_between_tutor_strategies*num_exposures +
+    num_exposures_lc +
+    prior_accuracy + 
+    average_correctness  +
+  (1|user_id) +
+  (1|problem_id) 
+  # note I took out the random intercept for hint id to make this run faster
+  ,
+  data = ad_10exposures[ad_1st$prior_num_problems >= 5,],
   family = binomial
 )
-summary(m4.3)
+summary(m5.3)
+
 ```

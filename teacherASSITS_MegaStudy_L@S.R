@@ -283,20 +283,20 @@ ad <- ad %>%
 
 colnames(ad)
 # spot check
-check <- ad %>%
-  filter(problem_id == 1479204) %>%
-  select(user_id, 
-         treatment_random,
-         n_attempts.x,
-         ,
-         
-         )
+# check <- ad %>%
+#   filter(problem_id == 1479204) %>%
+#   select(user_id, 
+#          treatment_random,
+#          n_attempts.x,
+#          ,
+#          
+#          )
+# 
+# colnames(ad)
 
-colnames(ad)
+### MODELS ####
 
-
-### Text Models: Subset of Data ####
-
+##### Test Models: Subset of Data ######
 table(ad$n_attempts > 2000)
 # create subset
 ad_small <- ad %>%
@@ -362,7 +362,7 @@ m1.4 <- glmer(next_problem_correctness_adjusted ~
 )
 summary(m1.4)
 
-anova(m1.3, m1.4) # ad_smallding videos DID NOT sig reduce deviance
+anova(m1.3, m1.4) 
 
 # ad_smalld text length
 m1.5 <- glmer(next_problem_correctness_adjusted ~
@@ -379,7 +379,7 @@ m1.5 <- glmer(next_problem_correctness_adjusted ~
 )
 summary(m1.5)
 
-anova(m1.4, m1.5) # ad_smallding text length DID NOT sig reduce deviance
+anova(m1.4, m1.5) 
 
 # ad_smalld message count
 m1.6 <- glmer(next_problem_correctness_adjusted ~
@@ -413,7 +413,123 @@ m1.7 <- glmer(next_problem_correctness_adjusted ~
               data =ad_small,
               family = binomial
 )
-summary(m1.5)
+summary(m1.7)
 
 anova(m1.6, m1.7) 
 
+
+
+##### Full Data Models ######
+
+# Null Model 
+mNull <- glmer(next_problem_correctness_adjusted ~
+                 + (1|problem_id) 
+               ,
+               data =ad,
+               family = binomial
+)
+summary(mNull)
+
+# add random intercept for 
+m1.1 <- glmer(next_problem_correctness_adjusted ~
+                + treatment_random
+              + (1 |problem_id) ,
+              data =ad,
+              family = binomial
+)
+summary(m1.1)
+
+
+# add random intercept for 
+m1.2 <- glmer(next_problem_correctness_adjusted ~
+                + treatment_random
+              + (1 + treatment_random|problem_id) ,
+              data =ad,
+              family = binomial
+)
+summary(m1.2)
+
+anova(m1.1, m1.2) # p value for whether the variance for treatment_random is == 0
+
+# add explanation
+m1.3 <- glmer(next_problem_correctness_adjusted ~
+                + treatment_random*
+                (explanation_diff)
+              + (1 + treatment_random|problem_id) 
+              ,
+              data =ad,
+              family = binomial
+)
+summary(m1.3)
+
+anova(m1.2, m1.3) 
+
+
+# add videos
+m1.4 <- glmer(next_problem_correctness_adjusted ~
+                + treatment_random*
+                (
+                  explanation_diff + 
+                    videos_diff
+                )
+              + (1 + treatment_random|problem_id) 
+              ,
+              data =ad,
+              family = binomial
+)
+summary(m1.4)
+
+anova(m1.3, m1.4) 
+
+# add text length
+m1.5 <- glmer(next_problem_correctness_adjusted ~
+                + treatment_random*
+                (
+                  explanation_diff + 
+                    videos_diff +
+                    text_length_dif
+                )
+              + (1 + treatment_random|problem_id) 
+              ,
+              data =ad,
+              family = binomial
+)
+summary(m1.5)
+
+anova(m1.4, m1.5) 
+
+# add message count
+m1.6 <- glmer(next_problem_correctness_adjusted ~
+                + treatment_random*
+                (
+                  explanation_diff + 
+                    videos_diff +
+                    text_length_dif +
+                    message_count_diff 
+                )
+              + (1 + treatment_random|problem_id) 
+              ,
+              data =ad,
+              family = binomial
+)
+summary(m1.6)
+
+anova(m1.5, m1.6) 
+
+# add images 
+m1.7 <- glmer(next_problem_correctness_adjusted ~
+                + treatment_random*
+                (videos_diff +
+                   explanation_diff +
+                   text_length_dif +
+                   message_count_diff +
+                   images_diff
+                )
+              + (1 + treatment_random|problem_id) 
+              ,
+              data =ad,
+              family = binomial
+)
+summary(m1.7)
+
+anova(m1.6, m1.7) 

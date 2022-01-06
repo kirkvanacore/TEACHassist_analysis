@@ -417,7 +417,7 @@ summary(m1.7)
 
 anova(m1.6, m1.7) 
 
-
+ 
 
 ##### Full Data Models ######
 
@@ -429,7 +429,7 @@ mNull <- glmer(next_problem_correctness_adjusted ~
                family = binomial
 )
 summary(mNull) 
-
+  
 # add random intercept for 
 m1.1 <- glmer(next_problem_correctness_adjusted ~
                 + treatment_random

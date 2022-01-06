@@ -305,7 +305,7 @@ length(unique(ad$problem_id))
 length(unique(ad_small$problem_id))
 
 # Null Model 
-mNull <- glmer(next_problem_correctness_ad_smalljusted ~
+mNull <- glmer(next_problem_correctness_adjusted ~
                  + (1|problem_id) 
                ,
                data =ad_small,
@@ -314,7 +314,7 @@ mNull <- glmer(next_problem_correctness_ad_smalljusted ~
 summary(mNull)
 
 # ad_smalld random intercept for 
-m1.1 <- glmer(next_problem_correctness_ad_smalljusted ~
+m1.1 <- glmer(next_problem_correctness_adjusted ~
                 + treatment_random
               + (1 |problem_id) ,
               data =ad_small,
@@ -324,7 +324,7 @@ summary(m1.1)
 
 
 # ad_smalld random intercept for 
-m1.2 <- glmer(next_problem_correctness_ad_smalljusted ~
+m1.2 <- glmer(next_problem_correctness_adjusted ~
                 + treatment_random
               + (1 + treatment_random|problem_id) ,
               data =ad_small,
@@ -335,7 +335,7 @@ summary(m1.2)
 anova(m1.1, m1.2) # p value for whether the variance for treatment_random is == 0
 
 # ad_smalld explanation
-m1.3 <- glmer(next_problem_correctness_ad_smalljusted ~
+m1.3 <- glmer(next_problem_correctness_adjusted ~
             + treatment_random*
               (explanation_diff)
             + (1 + treatment_random|problem_id) 
@@ -349,7 +349,7 @@ anova(m1.2, m1.3)
 
 
 # ad_smalld videos
-m1.4 <- glmer(next_problem_correctness_ad_smalljusted ~
+m1.4 <- glmer(next_problem_correctness_adjusted ~
                 + treatment_random*
                 (
                   explanation_diff + 
@@ -365,7 +365,7 @@ summary(m1.4)
 anova(m1.3, m1.4) # ad_smallding videos DID NOT sig reduce deviance
 
 # ad_smalld text length
-m1.5 <- glmer(next_problem_correctness_ad_smalljusted ~
+m1.5 <- glmer(next_problem_correctness_adjusted ~
                 + treatment_random*
                 (
                    explanation_diff + 
@@ -382,7 +382,7 @@ summary(m1.5)
 anova(m1.4, m1.5) # ad_smallding text length DID NOT sig reduce deviance
 
 # ad_smalld message count
-m1.6 <- glmer(next_problem_correctness_ad_smalljusted ~
+m1.6 <- glmer(next_problem_correctness_adjusted ~
                 + treatment_random*
                 (
                   explanation_diff + 
@@ -400,7 +400,7 @@ summary(m1.6)
 anova(m1.5, m1.6) 
 
 # ad_smalld images 
-m1.7 <- glmer(next_problem_correctness_ad_smalljusted ~
+m1.7 <- glmer(next_problem_correctness_adjusted ~
                 + treatment_random*
                 (videos_diff +
                  explanation_diff +

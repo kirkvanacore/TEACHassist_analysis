@@ -428,7 +428,7 @@ mNull <- glmer(next_problem_correctness_adjusted ~
                data =ad,
                family = binomial
 )
-summary(mNull)
+summary(mNull) 
 
 # add random intercept for 
 m1.1 <- glmer(next_problem_correctness_adjusted ~

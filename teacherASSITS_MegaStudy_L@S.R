@@ -305,42 +305,42 @@ length(unique(ad$problem_id))
 length(unique(ad_small$problem_id))
 
 # Null Model 
-mNull <- glmer(next_problem_correctness_adjusted ~
+mNull <- glmer(next_problem_correctness_ad_smalljusted ~
                  + (1|problem_id) 
                ,
-               data =ad,
+               data =ad_small,
                family = binomial
 )
 summary(mNull)
 
-# Add random intercept for 
-m1.1 <- glmer(next_problem_correctness_adjusted ~
+# ad_smalld random intercept for 
+m1.1 <- glmer(next_problem_correctness_ad_smalljusted ~
                 + treatment_random
               + (1 |problem_id) ,
-              data =ad,
+              data =ad_small,
               family = binomial
 )
 summary(m1.1)
 
 
-# Add random intercept for 
-m1.2 <- glmer(next_problem_correctness_adjusted ~
+# ad_smalld random intercept for 
+m1.2 <- glmer(next_problem_correctness_ad_smalljusted ~
                 + treatment_random
               + (1 + treatment_random|problem_id) ,
-              data =ad,
+              data =ad_small,
               family = binomial
 )
 summary(m1.2)
 
 anova(m1.1, m1.2) # p value for whether the variance for treatment_random is == 0
 
-# add explanation
-m1.3 <- glmer(next_problem_correctness_adjusted ~
+# ad_smalld explanation
+m1.3 <- glmer(next_problem_correctness_ad_smalljusted ~
             + treatment_random*
               (explanation_diff)
             + (1 + treatment_random|problem_id) 
             ,
-            data =ad,
+            data =ad_small,
             family = binomial
 )
 summary(m1.3)
@@ -348,8 +348,8 @@ summary(m1.3)
 anova(m1.2, m1.3) 
 
 
-# add videos
-m1.4 <- glmer(next_problem_correctness_adjusted ~
+# ad_smalld videos
+m1.4 <- glmer(next_problem_correctness_ad_smalljusted ~
                 + treatment_random*
                 (
                   explanation_diff + 
@@ -357,15 +357,15 @@ m1.4 <- glmer(next_problem_correctness_adjusted ~
                   )
               + (1 + treatment_random|problem_id) 
               ,
-              data =ad,
+              data =ad_small,
               family = binomial
 )
 summary(m1.4)
 
-anova(m1.3, m1.4) # adding videos DID NOT sig reduce deviance
+anova(m1.3, m1.4) # ad_smallding videos DID NOT sig reduce deviance
 
-# add text length
-m1.5 <- glmer(next_problem_correctness_adjusted ~
+# ad_smalld text length
+m1.5 <- glmer(next_problem_correctness_ad_smalljusted ~
                 + treatment_random*
                 (
                    explanation_diff + 
@@ -374,15 +374,15 @@ m1.5 <- glmer(next_problem_correctness_adjusted ~
                    )
               + (1 + treatment_random|problem_id) 
               ,
-              data =ad,
+              data =ad_small,
               family = binomial
 )
 summary(m1.5)
 
-anova(m1.4, m1.5) # adding text length DID NOT sig reduce deviance
+anova(m1.4, m1.5) # ad_smallding text length DID NOT sig reduce deviance
 
-# add message count
-m1.6 <- glmer(next_problem_correctness_adjusted ~
+# ad_smalld message count
+m1.6 <- glmer(next_problem_correctness_ad_smalljusted ~
                 + treatment_random*
                 (
                   explanation_diff + 
@@ -392,15 +392,15 @@ m1.6 <- glmer(next_problem_correctness_adjusted ~
                 )
               + (1 + treatment_random|problem_id) 
               ,
-              data =ad,
+              data =ad_small,
               family = binomial
 )
 summary(m1.6)
 
 anova(m1.5, m1.6) 
 
-# add images 
-m1.7 <- glmer(next_problem_correctness_adjusted ~
+# ad_smalld images 
+m1.7 <- glmer(next_problem_correctness_ad_smalljusted ~
                 + treatment_random*
                 (videos_diff +
                  explanation_diff +
@@ -410,7 +410,7 @@ m1.7 <- glmer(next_problem_correctness_adjusted ~
                 )
               + (1 + treatment_random|problem_id) 
               ,
-              data =ad,
+              data =ad_small,
               family = binomial
 )
 summary(m1.5)

@@ -362,7 +362,7 @@ m1.4 <- glmer(next_problem_correctness_adjusted ~
 )
 summary(m1.4)
 
-anova(m1.2, m1.4) 
+anova(m1.3, m1.4) # adding videos DID NOT sig reduce deviance
 
 # add text length
 m1.5 <- glmer(next_problem_correctness_adjusted ~

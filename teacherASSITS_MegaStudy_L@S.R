@@ -379,12 +379,15 @@ m1.5 <- glmer(next_problem_correctness_adjusted ~
 )
 summary(m1.5)
 
+anova(m1.4, m1.5) # adding text length DID NOT sig reduce deviance
+
 # add message count
 m1.6 <- glmer(next_problem_correctness_adjusted ~
                 + treatment_random*
                 (
                   explanation_diff + 
                   videos_diff +
+                  text_length_dif +
                   message_count_diff 
                 )
               + (1 + treatment_random|problem_id) 
@@ -393,6 +396,8 @@ m1.6 <- glmer(next_problem_correctness_adjusted ~
               family = binomial
 )
 summary(m1.6)
+
+anova(m1.5, m1.6) 
 
 # add images 
 m1.7 <- glmer(next_problem_correctness_adjusted ~
@@ -409,4 +414,6 @@ m1.7 <- glmer(next_problem_correctness_adjusted ~
               family = binomial
 )
 summary(m1.5)
+
+anova(m1.6, m1.7) 
 

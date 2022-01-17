@@ -34,9 +34,33 @@ library(mice)
 ##### Log File Data ####
 
 getwd()
-logs<-read.csv("Student Support Dataset/student_support_logs.csv")
+logs <- read.csv("Student Support Dataset/student_support_logs.csv")
 colnames(logs)
 head(logs)
+
+# remove logs form prelim analysis
+old_logs <-
+  read.csv(
+    "/Users/kirkvanacore/Documents/WPI Analyses/TEACHassist_analysis/TEACHassist_data2/teacherassist_logs.csv"
+  )
+colnames(old_logs)
+glimpse(logs$timestamp)
+glimpse(old_logs$timestamp)
+describe(logs$timestamp)
+describe(old_logs$timestamp)
+
+logs_c <- logs %>%
+  anti_join(old_logs %>%
+              select(
+                "user_id", # need to make sure that these IDs will work
+                "problem_id",
+                "timestamp"
+              ),
+              by = c("user_id", # need to make sure that these IDs will work
+                     "problem_id",
+                     "timestamp"))
+logs <- logs_c
+rm(logs_c)
 
 
 ###### Basic Descriptive ####
@@ -48,9 +72,6 @@ length(unique(logs$problem_id))
 # number of students
 length(unique(logs$user_id))
 
-
-# number of students
-length(unique(logs$user_id))
 
 
 ###### Log Data Cleaning ####
@@ -124,8 +145,27 @@ head(pf)
 length(unique(pf$problem_id))
 length(unique(ad$problem_id))
 
+pf$mathflag =
+  pf$problem_subject_apr  +  pf$problem_subject_bf  +   pf$problem_subject_c +
+  pf$problem_subject_cc   +  pf$problem_subject_ced  +  pf$problem_subject_cn +    pf$problem_subject_co +
+  pf$problem_subject_cp   +  pf$problem_subject_ee  +   pf$problem_subject_f   +   pf$problem_subject_g +
+  pf$problem_subject_gmd  +  pf$problem_subject_gpe  +  pf$problem_subject_ic +  pf$problem_subject_id +
+  pf$problem_subject_if   +  pf$problem_subject_le  +   pf$problem_subject_md  +   pf$problem_subject_mg +
+  pf$problem_subject_nbt  +  pf$problem_subject_nf   +  pf$problem_subject_ns   +  pf$problem_subject_oa +
+  pf$problem_subject_q    + pf$problem_subject_rei +  pf$problem_subject_rn   +  pf$problem_subject_rp +
+  pf$problem_subject_sp   +  pf$problem_subject_srt +   pf$problem_subject_sse +   pf$problem_subject_tf + pf$problem_subject_vm
+
+table(pf$mathflag)
+
 mice::md.pattern(pf) # no NAs
 
+###### Remove None Math Problems from Logs #####
+ 
+logs <- logs %>%
+  anti_join(pf %>%
+              filter(mathflag == 0) %>%
+              select(problem_id)
+            ) 
 
 ##### Tutoring Strategy Features ####
 ts <- read.csv("Student Support Dataset/student_support_features.csv")
@@ -158,20 +198,27 @@ Experiments <- Experiments %>%
 table(Experiments$n_conditions_per_problem) # there are 2,671 problems with conditions with 2 conditions problem
 
 # add in a random dummy variable for "treatment_random"
+set.seed(257)
 Experiments <- Experiments %>% 
+  ungroup() %>%
   filter(n_conditions_per_problem == 2) %>% # only keep problems/experiments with two conditions
   group_by(problem_id) %>%
   arrange(selected_student_support_id) %>%
-  mutate(treatment=seq(n())) %>% 
+  mutate(treatment= sample(seq(n())),) %>% 
   distinct( .keep_all=TRUE)
 
 
-Experiments$treatment_random <- ifelse(Experiments$treatment ==1, 1, 0)
+Experiments$treatment_random <- ifelse(Experiments$treatment == 1, 1, 0)
 
 table(Experiments$treatment_random)
 colnames(Experiments)
 
 # add treatment_random to ad now, will add other variables later
+class(ad$selected_student_support_id)
+class(Experiments$selected_student_support_id)
+class(ad$alternative_student_support_id_1)
+class(Experiments$alternative_student_support_id_1)
+
 ad <- Experiments %>%
   select(
     problem_id,
@@ -204,13 +251,17 @@ table(duplicated(treat_probs$problem_id))
 
 class(pf$t)
 
+class(ts$selected_student_support_id)
+colnames(treat_probs)
+
+
 # add in tutor strategies meta data
 treat_probs <- treat_probs %>%
   left_join(ts,
-            by = c("selected_student_support_id" = "tutor_strategy_id"),
+            by = c("selected_student_support_id" = "student_support_id"),
             ) %>%
 left_join(ts,
-          by = c("alternative_student_support_id_1" = "tutor_strategy_id"),
+          by = c("alternative_student_support_id_1" = "student_support_id"),
 )
 colnames(treat_probs)
 
@@ -294,13 +345,26 @@ colnames(ad)
 # 
 # colnames(ad)
 
+### Student MetaData ####
+
+
+
+##### Add in Student Prior Accuracy ######
+
+
+
 ### MODELS ####
 
 ##### Test Models: Subset of Data ######
 table(ad$n_attempts > 2000)
+table(ad$n_attempts > 500) 
+table(ad$n_attempts > 750) / length(ad$n_attempts)
+
+table(ad$n_attempts > 200)/ length(ad$n_attempts)
+
 # create subset
 ad_small <- ad %>%
-  filter(n_attempts >= 2000)
+  filter(n_attempts >= 750)
 length(unique(ad$problem_id))
 length(unique(ad_small$problem_id))
 
@@ -417,7 +481,24 @@ summary(m1.7)
 
 anova(m1.6, m1.7) 
 
- 
+avg <- ad_small %>%
+  ungroup() %>%
+  group_by(problem_id,
+           explanation_diff) %>%
+  summarise(Pre_Cor = mean(next_problem_correctness_adjusted)) %>%
+  group_by(explanation_diff) %>%
+  summarise(Pre_Cor = mean(Pre_Cor),
+            n = n())
+
+avg <- ad %>%
+  ungroup() %>%
+  group_by(problem_id,
+           explanation_diff) %>%
+  summarise(Pre_Cor = mean(next_problem_correctness_adjusted)) %>%
+  group_by(explanation_diff) %>%
+  summarise(Pre_Cor = mean(Pre_Cor),
+            n = n())
+avg
 
 ##### Full Data Models ######
 
